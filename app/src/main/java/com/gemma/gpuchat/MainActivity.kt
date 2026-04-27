@@ -75,13 +75,42 @@ fun ChatScreen() {
     // Initialize model
     LaunchedEffect(Unit) {
         try {
-            val primaryPath = File(context.filesDir, "gemma3-1b-it-q4.litertlm").absolutePath
-            val fallbackPath = "/sdcard/gemma3-1b-it-q4.litertlm"
-            val modelPath = if (File(primaryPath).exists()) primaryPath else fallbackPath
+            val modelCandidates = listOf(
+                "gemma3-1b-it-q4.litertlm",
+                "gemma4_generic.litertlm",
+                "Gemma3-1B-IT_multi-prefill-seq_q4_ekv4096.litertlm",
+                "Gemma3-1B-IT-LiteRT.litertlm",
+                "gemma3-1b-it-q4_ekv.litertlm"
+            )
+            val filesDir = context.filesDir
+            var modelPath: String? = null
 
-            Log.d("GemmaApp", "Model path: $modelPath")
-            Log.d("GemmaApp", "Primary exists: ${File(primaryPath).exists()}, Fallback exists: ${File(fallbackPath).exists()}")
+            for (candidate in modelCandidates) {
+                val path = File(filesDir, candidate).absolutePath
+                if (File(path).exists()) {
+                    modelPath = path
+                    Log.d("GemmaApp", "Found model: $candidate at $path")
+                    break
+                }
+            }
 
+            if (modelPath == null) {
+                // Try sdcard fallback
+                for (candidate in modelCandidates) {
+                    val path = "/sdcard/$candidate"
+                    if (File(path).exists()) {
+                        modelPath = path
+                        Log.d("GemmaApp", "Found model on sdcard: $candidate at $path")
+                        break
+                    }
+                }
+            }
+
+            if (modelPath == null) {
+                throw Exception("No model found! Tried: ${modelCandidates.joinToString()}")
+            }
+
+            Log.d("GemmaApp", "Loading model from: $modelPath")
             LlmChatModelHelper.initialize(context, modelPath)
             isModelReady = true
             Log.d("GemmaApp", "Model initialized successfully!")
