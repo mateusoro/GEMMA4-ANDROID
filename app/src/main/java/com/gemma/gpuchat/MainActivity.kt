@@ -1,7 +1,6 @@
 package com.gemma.gpuchat
 
 import android.os.Bundle
-import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -15,13 +14,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -33,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -40,22 +43,44 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import java.io.File
 
+private const val TAG = "GemmaApp"
+
 class MainActivity : ComponentActivity() {
-    private val TAG = "GemmaApp"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Log.d(TAG, "onCreate called")
+        AppLogger.init(this)
+        AppLogger.d(TAG, "=== onCreate() called ===")
+        AppLogger.d(TAG, "App package: $packageName")
+        AppLogger.d(TAG, "filesDir: ${filesDir.absolutePath}")
         Toast.makeText(this, "App started!", Toast.LENGTH_SHORT).show()
+
         setContent {
             MaterialTheme {
                 ChatScreen()
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        AppLogger.d(TAG, "onResume() called")
+    }
+
+    override fun onPause() {
+        super.onPause()
+        AppLogger.d(TAG, "onPause() called")
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        AppLogger.d(TAG, "onDestroy() called")
+        LlmChatModelHelper.release()
     }
 }
 
@@ -71,9 +96,20 @@ fun ChatScreen() {
     var inputText by remember { mutableStateOf("") }
     var isModelReady by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var showLogs by remember { mutableStateOf(false) }
+    var logContent by remember { mutableStateOf("") }
+    var initStage by remember { mutableStateOf("") }
+    var initProgress by remember { mutableIntStateOf(0) }
+    var isInitializing by remember { mutableStateOf(true) }
+    var memoryInfo by remember { mutableStateOf<LlmChatModelHelper.MemoryInfo?>(null) }
 
     // Initialize model
     LaunchedEffect(Unit) {
+        AppLogger.d(TAG, "LaunchedEffect started - initializing model")
+        isInitializing = true
+        initStage = "Procurando modelo..."
+        initProgress = 0
+
         try {
             val modelCandidates = listOf(
                 "gemma3-1b-it-q4.litertlm",
@@ -87,38 +123,70 @@ fun ChatScreen() {
             var modelPath: String? = null
 
             for (candidate in modelCandidates) {
-                val path = File(filesDir, candidate).absolutePath
+                val path = "/data/local/tmp/$candidate"
+                AppLogger.d(TAG, "Checking: $path")
                 if (File(path).exists()) {
                     modelPath = path
-                    Log.d("GemmaApp", "Found model: $candidate at $path")
+                    AppLogger.d(TAG, "Found model in /data/local/tmp: $candidate at $path")
+                    initStage = "Modelo encontrado: $candidate"
+                    initProgress = 5
                     break
                 }
             }
 
             if (modelPath == null) {
-                // Try sdcard fallback
                 for (candidate in modelCandidates) {
-                    val path = "/sdcard/$candidate"
+                    val path = File(filesDir, candidate).absolutePath
+                    AppLogger.d(TAG, "Checking: $path")
                     if (File(path).exists()) {
                         modelPath = path
-                        Log.d("GemmaApp", "Found model on sdcard: $candidate at $path")
+                        AppLogger.d(TAG, "Found model: $candidate at $path")
+                        initStage = "Modelo encontrado: $candidate"
+                        initProgress = 5
                         break
                     }
                 }
             }
 
             if (modelPath == null) {
-                throw Exception("No model found! Tried: ${modelCandidates.joinToString()}")
+                for (candidate in modelCandidates) {
+                    val path = "/sdcard/$candidate"
+                    AppLogger.d(TAG, "Checking sdcard: $path")
+                    if (File(path).exists()) {
+                        modelPath = path
+                        AppLogger.d(TAG, "Found model on sdcard: $candidate at $path")
+                        initStage = "Modelo encontrado: $candidate"
+                        initProgress = 5
+                        break
+                    }
+                }
             }
 
-            Log.d("GemmaApp", "Loading model from: $modelPath")
-            LlmChatModelHelper.initialize(context, modelPath)
+            if (modelPath == null) {
+                val tried = modelCandidates.joinToString()
+                AppLogger.e(TAG, "No model found! Tried: $tried")
+                throw Exception("No model found! Tried: $tried")
+            }
+
+            AppLogger.i(TAG, "Loading model from: $modelPath")
+            initStage = "Carregando modelo..."
+
+            LlmChatModelHelper.initialize(context, modelPath) { stage, progress ->
+                initStage = stage
+                initProgress = progress
+            }
             isModelReady = true
-            Log.d("GemmaApp", "Model initialized successfully!")
+            isInitializing = false
+            memoryInfo = LlmChatModelHelper.getMemoryUsage()
+            AppLogger.i(TAG, "Model initialized successfully!")
+            initStage = "Pronto!"
             Toast.makeText(context, "Model ready!", Toast.LENGTH_SHORT).show()
+            snackbarHostState.showSnackbar("Modelo pronto!")
         } catch (e: Exception) {
+            isInitializing = false
+            AppLogger.e(TAG, "Model init failed", e)
+            initStage = "Erro: ${e.message}"
             errorMessage = "Model init failed: ${e.message}"
-            Log.e("GemmaApp", "Model init failed", e)
             snackbarHostState.showSnackbar("Model init failed: ${e.message}")
             Toast.makeText(context, "Model init failed: ${e.message}", Toast.LENGTH_LONG).show()
         }
@@ -127,6 +195,7 @@ fun ChatScreen() {
     // Cleanup on dispose
     DisposableEffect(Unit) {
         onDispose {
+            AppLogger.d(TAG, "Disposing - releasing model")
             LlmChatModelHelper.release()
         }
     }
@@ -141,94 +210,181 @@ fun ChatScreen() {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Gemma 4 GPU Chat") }
+                title = { Text("Gemma 4 GPU Chat") },
+                actions = {
+                    Button(onClick = {
+                        logContent = AppLogger.readLogFile()
+                        showLogs = !showLogs
+                    }) {
+                        Text(if (showLogs) "Hide Logs" else "Show Logs")
+                    }
+                }
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { paddingValues ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Messages list
-            LazyColumn(
-                state = listState,
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                item { Spacer(modifier = Modifier.height(8.dp)) }
-                items(messages, key = { it.id }) { message ->
-                    ChatBubble(message = message)
+            // Loading overlay
+            if (isInitializing) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(64.dp),
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text(
+                        text = "Carregando Gemma...",
+                        style = MaterialTheme.typography.headlineSmall
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = initStage,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    LinearProgressIndicator(
+                        progress = { initProgress / 100f },
+                        modifier = Modifier.fillMaxWidth(0.8f),
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "$initProgress%",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    memoryInfo?.let { mem ->
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "Modelo: ${mem.modelSizeMb} MB",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "Memória app: ${mem.appUsedMb} MB / ${mem.appTotalMb} MB",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
-                item { Spacer(modifier = Modifier.height(8.dp)) }
             }
 
-            // Input row
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
+            // Normal chat content
+            Column(
+                modifier = Modifier.fillMaxSize()
             ) {
-                OutlinedTextField(
-                    value = inputText,
-                    onValueChange = { inputText = it },
-                    modifier = Modifier.weight(1f),
-                    placeholder = { Text("Type a message...") },
-                    enabled = isModelReady,
-                    singleLine = true,
-                    shape = RoundedCornerShape(24.dp)
-                )
-                Button(
-                    onClick = {
-                        if (inputText.isBlank() || !isModelReady) return@Button
-
-                        val userMessage = ChatMessage(
-                            text = inputText,
-                            isUser = true
-                        )
-                        messages = messages + userMessage
-                        inputText = ""
-
-                        // Add placeholder for model response
-                        var modelResponseId = ""
-                        messages = messages + ChatMessage(
-                            id = modelResponseId,
-                            text = "",
-                            isUser = false
-                        )
-
-                        LlmChatModelHelper.sendMessage(
-                            message = userMessage.text,
-                            onToken = { token ->
-                                // Update last message with new token
-                                messages = messages.mapIndexed { index, msg ->
-                                    if (index == messages.lastIndex && !msg.isUser) {
-                                        modelResponseId = msg.id
-                                        msg.copy(text = msg.text + token)
-                                    } else msg
-                                }
-                            },
-                            onDone = {
-                                scope.launch {
-                                    snackbarHostState.showSnackbar("Response complete")
-                                }
-                            },
-                            onError = { error ->
-                                scope.launch {
-                                    snackbarHostState.showSnackbar("Error: ${error.message}")
-                                }
+                if (showLogs) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(200.dp)
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .padding(8.dp)
+                    ) {
+                        LazyColumn {
+                            items(logContent.lines().takeLast(50)) { line ->
+                                Text(
+                                    text = line,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontFamily = FontFamily.Monospace
+                                )
                             }
-                        )
-                    },
-                    enabled = isModelReady && inputText.isNotBlank()
+                        }
+                    }
+                    Text(
+                        text = "Log: ${AppLogger.getLogFilePath()}",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(horizontal = 8.dp)
+                    )
+                }
+
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("Send")
+                    item { Spacer(modifier = Modifier.height(8.dp)) }
+                    items(messages, key = { it.id }) { message ->
+                        ChatBubble(message = message)
+                    }
+                    item { Spacer(modifier = Modifier.height(8.dp)) }
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = inputText,
+                        onValueChange = { inputText = it },
+                        modifier = Modifier.weight(1f),
+                        placeholder = { Text("Type a message...") },
+                        enabled = isModelReady,
+                        singleLine = true,
+                        shape = RoundedCornerShape(24.dp)
+                    )
+                    Button(
+                        onClick = {
+                            if (inputText.isBlank() || !isModelReady) return@Button
+
+                            AppLogger.d(TAG, "User sent: $inputText")
+                            val userMessage = ChatMessage(
+                                text = inputText,
+                                isUser = true
+                            )
+                            messages = messages + userMessage
+                            inputText = ""
+
+                            var modelResponseId = ""
+                            messages = messages + ChatMessage(
+                                id = modelResponseId,
+                                text = "",
+                                isUser = false
+                            )
+
+                            LlmChatModelHelper.sendMessage(
+                                message = userMessage.text,
+                                onToken = { token ->
+                                    AppLogger.d(TAG, "Token: $token")
+                                    messages = messages.mapIndexed { index, msg ->
+                                        if (index == messages.lastIndex && !msg.isUser) {
+                                            modelResponseId = msg.id
+                                            msg.copy(text = msg.text + token)
+                                        } else msg
+                                    }
+                                },
+                                onDone = {
+                                    AppLogger.i(TAG, "Response complete")
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar("Response complete")
+                                    }
+                                },
+                                onError = { error ->
+                                    AppLogger.e(TAG, "Error: ${error.message}", error)
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar("Error: ${error.message}")
+                                    }
+                                }
+                            )
+                        },
+                        enabled = isModelReady && inputText.isNotBlank()
+                    ) {
+                        Text("Send")
+                    }
                 }
             }
         }
@@ -275,3 +431,9 @@ fun ChatBubble(message: ChatMessage) {
         }
     }
 }
+
+data class ChatMessage(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val text: String,
+    val isUser: Boolean
+)

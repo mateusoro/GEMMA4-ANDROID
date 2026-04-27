@@ -8,6 +8,8 @@
         android:icon="@android:drawable/sym_def_app_icon"
         android:label="Gemma 4 GPU Chat"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        <uses-native-library android:name="libvndksupport.so" android:required="false"/>
+        <uses-native-library android:name="libOpenCL.so" android:required="false"/>
         <activity
             android:name=".MainActivity"
             android:exported="true"

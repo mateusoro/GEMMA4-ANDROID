@@ -1,7 +1,7 @@
 package com.gemma.gpuchat
 
 import android.content.Context
-import android.util.Log
+import android.os.ParcelFileDescriptor
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.Engine
@@ -9,34 +9,138 @@ import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.Conversation
 import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.MessageCallback
+import java.io.File
+import java.io.FileInputStream
 
 object LlmChatModelHelper {
     private var engine: Engine? = null
     private var conversation: Conversation? = null
     private val TAG = "LlmChatModelHelper"
 
-    fun initialize(context: Context, modelPath: String) {
-        Log.d(TAG, "initialize called with path: $modelPath")
-        Log.d(TAG, "filesDir: ${context.filesDir}")
+    // Memory info
+    private var loadedModelSizeBytes: Long = 0L
+
+    fun getLoadedModelSizeBytes(): Long = loadedModelSizeBytes
+
+    fun getMemoryUsage(): MemoryInfo {
+        val runtime = Runtime.getRuntime()
+        val totalMem = runtime.totalMemory()
+        val freeMem = runtime.freeMemory()
+        val usedMem = totalMem - freeMem
+        val maxMem = runtime.maxMemory()
+        return MemoryInfo(
+            appUsedMb = usedMem / (1024 * 1024),
+            appTotalMb = maxMem / (1024 * 1024),
+            modelSizeMb = loadedModelSizeBytes / (1024 * 1024)
+        )
+    }
+
+    data class MemoryInfo(
+        val appUsedMb: Long,
+        val appTotalMb: Long,
+        val modelSizeMb: Long
+    )
+
+    fun initialize(context: Context, modelPath: String, onProgress: (String, Int) -> Unit = { _, _ -> }) {
+        AppLogger.d(TAG, ">>> initialize() CALLED <<<")
+        AppLogger.d(TAG, "modelPath: $modelPath")
+        AppLogger.d(TAG, "filesDir: ${context.filesDir}")
+
+        onProgress("Procurando modelo...", 0)
+
+        // Get model file size
         try {
-            val engineConfig = EngineConfig(
-                modelPath = modelPath,
-                backend = Backend.GPU(),
-                maxNumTokens = 2048
-            )
-            Log.d(TAG, "Creating Engine with GPU backend...")
-            engine = Engine(engineConfig).apply {
-                Log.d(TAG, "Calling engine.initialize()...")
-                initialize()
-                Log.d(TAG, "engine.initialize() returned!")
+            val modelFile = File(modelPath)
+            if (modelFile.exists()) {
+                loadedModelSizeBytes = modelFile.length()
+                AppLogger.d(TAG, "Model file size: ${loadedModelSizeBytes} bytes (${loadedModelSizeBytes / (1024*1024)} MB)")
             }
-            Log.d(TAG, "Engine created successfully!")
-            conversation = engine!!.createConversation()
-            Log.d(TAG, "Conversation created!")
         } catch (e: Exception) {
-            Log.e(TAG, "Initialization failed", e)
+            AppLogger.w(TAG, "Could not get model file size: ${e.message}")
+        }
+
+        // Try GPU first
+        try {
+            AppLogger.d(TAG, "Trying GPU backend...")
+            onProgress("Iniciando GPU backend...", 10)
+            initializeWithBackend(context, modelPath, Backend.GPU(), onProgress)
+            AppLogger.i(TAG, "GPU backend SUCCESS!")
+            onProgress("Modelo carregado com sucesso!", 100)
+            return
+        } catch (e: Exception) {
+            val msg = e.message ?: ""
+            AppLogger.w(TAG, "GPU failed: $msg")
+            if (msg.contains("PERMISSION_DENIED") || msg.contains("Permission denied") || msg.contains("open() failed")) {
+                AppLogger.w(TAG, "GPU permission denied - falling back to CPU")
+            }
+        }
+
+        // Fallback: try CPU
+        try {
+            AppLogger.d(TAG, "Trying CPU backend...")
+            onProgress("GPU falhou, tentando CPU...", 50)
+            initializeWithBackend(context, modelPath, Backend.CPU(), onProgress)
+            AppLogger.i(TAG, "CPU backend SUCCESS (fallback)!")
+            onProgress("Modelo carregado (CPU fallback)!", 100)
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "CPU also failed: ${e.message}", e)
             throw e
         }
+    }
+
+    private fun initializeWithBackend(context: Context, modelPath: String, backend: Backend, onProgress: (String, Int) -> Unit = { _, _ -> }) {
+        AppLogger.d(TAG, "Backend: $backend (maxNumTokens=2048)")
+
+        // If path is on sdcard, try to copy to internal storage for native access
+        var actualPath: String = modelPath
+        if (modelPath.startsWith("/sdcard")) {
+            AppLogger.d(TAG, "Model on sdcard - attempting copy to internal storage...")
+            try {
+                val modelFile = File(modelPath)
+                val internalFile = File(context.filesDir, modelFile.name)
+                if (!internalFile.exists() || internalFile.length() != modelFile.length()) {
+                    AppLogger.d(TAG, "Copying ${modelFile.length()} bytes to ${internalFile.absolutePath}...")
+                    modelFile.inputStream().use { input ->
+                        internalFile.outputStream().use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                    AppLogger.i(TAG, "Copy complete: ${internalFile.length()} bytes")
+                } else {
+                    AppLogger.d(TAG, "Internal copy already exists")
+                }
+                actualPath = internalFile.absolutePath
+            } catch (e: Exception) {
+                AppLogger.w(TAG, "Copy failed: ${e.message}, using original path")
+                actualPath = modelPath
+            }
+        } else {
+            actualPath = modelPath
+        }
+
+        val engineConfig = EngineConfig(
+            modelPath = actualPath,
+            backend = backend,
+            maxNumTokens = 2048
+        )
+        AppLogger.d(TAG, "EngineConfig created with path: $actualPath")
+        AppLogger.d(TAG, "Creating Engine instance...")
+        onProgress("Criando engine...", 30)
+
+        engine = Engine(engineConfig)
+        AppLogger.d(TAG, "Engine instance created, calling initialize()...")
+        onProgress("Inicializando modelo (pode levar 10-20s)...", 40)
+
+        engine!!.initialize()
+        AppLogger.d(TAG, "engine.initialize() returned successfully")
+        onProgress("Engine initialized, criando conversa...", 80)
+
+        AppLogger.d(TAG, "Creating conversation...")
+        conversation = engine!!.createConversation()
+        AppLogger.d(TAG, "Conversation created: $conversation")
+        onProgress("Conversa pronta!", 90)
+
+        AppLogger.i(TAG, ">>> INITIALIZATION COMPLETE (backend=$backend) <<<")
     }
 
     fun sendMessage(
@@ -45,32 +149,58 @@ object LlmChatModelHelper {
         onDone: () -> Unit,
         onError: (Throwable) -> Unit
     ) {
-        Log.d(TAG, "sendMessage called: $message")
+        AppLogger.d(TAG, ">>> sendMessage() CALLED <<<")
+        AppLogger.d(TAG, "message: $message")
+        AppLogger.d(TAG, "conversation: $conversation")
+
+        if (conversation == null) {
+            AppLogger.e(TAG, "conversation is NULL!")
+            onError(IllegalStateException("Conversation not initialized"))
+            return
+        }
+
         val callback = object : MessageCallback {
             override fun onMessage(message: Message) {
-                Log.d(TAG, "onMessage: $message")
-                onToken(message.toString())
+                val text = message.toString()
+                AppLogger.d(TAG, "onMessage: '$text'")
+                onToken(text)
             }
+
             override fun onDone() {
-                Log.d(TAG, "onDone")
+                AppLogger.i(TAG, "onDone")
                 onDone()
             }
+
             override fun onError(throwable: Throwable) {
-                Log.e(TAG, "onError", throwable)
+                AppLogger.e(TAG, "onError: ${throwable.message}", throwable)
                 onError(throwable)
             }
         }
+
+        AppLogger.d(TAG, "Calling conversation.sendMessageAsync()...")
         conversation?.sendMessageAsync(
             Contents.of(message),
             callback
         )
+        AppLogger.d(TAG, "sendMessageAsync() returned (async)")
     }
 
     fun release() {
-        Log.d(TAG, "release called")
-        conversation?.close()
-        engine?.close()
-        conversation = null
-        engine = null
+        AppLogger.d(TAG, ">>> release() CALLED <<<")
+        try {
+            conversation?.let {
+                AppLogger.d(TAG, "Closing conversation...")
+                it.close()
+            }
+            engine?.let {
+                AppLogger.d(TAG, "Closing engine...")
+                it.close()
+            }
+            conversation = null
+            engine = null
+            AppLogger.i(TAG, "release() complete")
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "release() error", e)
+        }
     }
 }
