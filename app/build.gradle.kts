@@ -29,6 +29,10 @@ android {
     }
 }
 
+kotlin {
+    jvmToolchain(21)
+}
+
 dependencies {
     implementation("com.google.ai.edge.litertlm:litertlm-android:latest.release")
     implementation(platform("androidx.compose:compose-bom:2024.12.01"))
