@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "gemma4android",
+  "project_id": "4b480eba-b2bf-4d32-a3b6-923b2882e4fb"
+}
