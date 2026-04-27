@@ -3,3 +3,9 @@
 .dolt/
 *.db
 .beads-credential-key
+
+# Build artifacts
+build/
+.gradle/
+.gradle/
+.kotlin/
