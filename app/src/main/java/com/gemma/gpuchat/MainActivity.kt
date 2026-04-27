@@ -78,6 +78,7 @@ fun ChatScreen() {
             val modelCandidates = listOf(
                 "gemma3-1b-it-q4.litertlm",
                 "gemma4_generic.litertlm",
+                "Gemma3-1B-IT.litertlm",
                 "Gemma3-1B-IT_multi-prefill-seq_q4_ekv4096.litertlm",
                 "Gemma3-1B-IT-LiteRT.litertlm",
                 "gemma3-1b-it-q4_ekv.litertlm"

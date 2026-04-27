@@ -1,44 +1,41 @@
 # ADB Configuration
 
-**Device IP:** 192.168.0.17
-**ADB Port:** 42005 (ATUALIZADO - verificar com `adb devices`)
+**Device IP:** 192.168.0.20
+**ADB Port:** 40975
 
-## Connect
+## Quick Connect
 ```bash
-adb connect 192.168.0.17:42005
+adb connect 192.168.0.20:40975
 ```
 
-## Install APK
+## Push Model + Install + Start
 ```bash
-adb -s 192.168.0.17:42005 install -r app/build/outputs/apk/debug/app-debug.apk
+# Modelo ja na pasta: Gemma3-1B-IT.litertlm (584MB) no PC
+# NOVO: Modelo tambem ja copiado no dispositivo em /sdcard/gemma3-1b-it-q4.litertlm
+
+# Install APK
+adb -s 192.168.0.20:40975 install -r app/build/outputs/apk/debug/app-debug.apk
+
+# Start app
+adb -s 192.168.0.20:40975 shell am start -n com.gemma.gpuchat/.MainActivity
 ```
 
-## Push Model (.litertlm required)
+## View Logs (dispositivo pode ter logcat vazio - usar screenshot)
 ```bash
-# Criar diretório
-adb -s 192.168.0.17:42005 shell "run-as com.gemma.gpuchat mkdir -p files"
-adb -s 192.168.0.17:42005 shell "run-as com.gemma.gpuchat chmod 777 files"
-
-# Push do modelo (troque pelo nome real)
-adb -s 192.168.0.17:42005 push gemma3-1b-it-q4.litertlm /data/data/com.gemma.gpuchat/files/
+adb -s 192.168.0.20:40975 logcat -d 2>&1 | Select-String -Pattern "Gemma|LlmChat|Model|Error"
 ```
 
-## Start App
+## Screenshot (mais confiavel que logcat neste dispositivo)
 ```bash
-adb -s 192.168.0.17:42005 shell am start -n com.gemma.gpuchat/.MainActivity
+adb -s 192.168.0.20:40975 exec-out screencap -p > screen.png
 ```
 
 ## Stop App
 ```bash
-adb -s 192.168.0.17:42005 shell am force-stop com.gemma.gpuchat
+adb -s 192.168.0.20:40975 shell am force-stop com.gemma.gpuchat
 ```
 
-## View Logs
+## Copiar modelo novamente (se precisar)
 ```bash
-adb -s 192.168.0.17:42005 logcat -d 2>&1 | Select-String -Pattern "Gemma|LlmChat|Error|Exception|FATAL"
-```
-
-## Verify Model Files
-```bash
-adb -s 192.168.0.17:42005 shell "run-as com.gemma.gpuchat ls -la files/"
+# Ja feito: cp /sdcard/Gemma3-1B-IT.litertlm /sdcard/gemma3-1b-it-q4.litertlm
 ```

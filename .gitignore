@@ -9,3 +9,7 @@ build/
 .gradle/
 .gradle/
 .kotlin/
+
+# Model files (too large for repo)
+*.litertlm
+*.gguf
