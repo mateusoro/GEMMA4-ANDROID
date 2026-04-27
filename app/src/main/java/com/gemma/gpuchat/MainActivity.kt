@@ -1,6 +1,8 @@
 package com.gemma.gpuchat
 
 import android.os.Bundle
+import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -43,8 +45,12 @@ import kotlinx.coroutines.launch
 import java.io.File
 
 class MainActivity : ComponentActivity() {
+    private val TAG = "GemmaApp"
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Log.d(TAG, "onCreate called")
+        Toast.makeText(this, "App started!", Toast.LENGTH_SHORT).show()
         setContent {
             MaterialTheme {
                 ChatScreen()
@@ -73,11 +79,18 @@ fun ChatScreen() {
             val fallbackPath = "/sdcard/gemma3-1b-it-q4.litertlm"
             val modelPath = if (File(primaryPath).exists()) primaryPath else fallbackPath
 
+            Log.d("GemmaApp", "Model path: $modelPath")
+            Log.d("GemmaApp", "Primary exists: ${File(primaryPath).exists()}, Fallback exists: ${File(fallbackPath).exists()}")
+
             LlmChatModelHelper.initialize(context, modelPath)
             isModelReady = true
+            Log.d("GemmaApp", "Model initialized successfully!")
+            Toast.makeText(context, "Model ready!", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
             errorMessage = "Model init failed: ${e.message}"
+            Log.e("GemmaApp", "Model init failed", e)
             snackbarHostState.showSnackbar("Model init failed: ${e.message}")
+            Toast.makeText(context, "Model init failed: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 
