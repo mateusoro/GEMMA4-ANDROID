@@ -1,6 +1,10 @@
+@file:OptIn(ExperimentalMaterial3Api::class)
+
 package com.gemma.gpuchat
 
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -35,7 +39,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -45,7 +48,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 private const val TAG = "GemmaApp"
@@ -54,12 +59,13 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        AppLogger.init(this)
-        AppLogger.d(TAG, "=== onCreate() called ===")
-        AppLogger.d(TAG, "App package: $packageName")
-        AppLogger.d(TAG, "filesDir: ${filesDir.absolutePath}")
+        try {
+            AppLogger.init(this)
+            AppLogger.d(TAG, "=== onCreate() called ===")
+        } catch (e: Exception) {
+            android.util.Log.e(TAG, "Logger init failed", e)
+        }
         Toast.makeText(this, "App started!", Toast.LENGTH_SHORT).show()
-
         setContent {
             MaterialTheme {
                 ChatScreen()
@@ -67,24 +73,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    override fun onResume() {
-        super.onResume()
-        AppLogger.d(TAG, "onResume() called")
-    }
-
-    override fun onPause() {
-        super.onPause()
-        AppLogger.d(TAG, "onPause() called")
-    }
-
     override fun onDestroy() {
         super.onDestroy()
-        AppLogger.d(TAG, "onDestroy() called")
         LlmChatModelHelper.release()
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen() {
     val context = LocalContext.current
@@ -98,17 +92,22 @@ fun ChatScreen() {
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showLogs by remember { mutableStateOf(false) }
     var logContent by remember { mutableStateOf("") }
-    var initStage by remember { mutableStateOf("") }
-    var initProgress by remember { mutableIntStateOf(0) }
+
+    // Loading UI state
+    var initStage by remember { mutableStateOf("Iniciando...") }
+    var initProgress by remember { mutableStateOf(0f) }
     var isInitializing by remember { mutableStateOf(true) }
     var memoryInfo by remember { mutableStateOf<LlmChatModelHelper.MemoryInfo?>(null) }
+
+    // Handler for UI thread updates from background callbacks
+    val mainHandler = remember { Handler(Looper.getMainLooper()) }
 
     // Initialize model
     LaunchedEffect(Unit) {
         AppLogger.d(TAG, "LaunchedEffect started - initializing model")
         isInitializing = true
         initStage = "Procurando modelo..."
-        initProgress = 0
+        initProgress = 0f
 
         try {
             val modelCandidates = listOf(
@@ -122,6 +121,7 @@ fun ChatScreen() {
             val filesDir = context.filesDir
             var modelPath: String? = null
 
+            // First check /data/local/tmp
             for (candidate in modelCandidates) {
                 val path = "/data/local/tmp/$candidate"
                 AppLogger.d(TAG, "Checking: $path")
@@ -129,11 +129,12 @@ fun ChatScreen() {
                     modelPath = path
                     AppLogger.d(TAG, "Found model in /data/local/tmp: $candidate at $path")
                     initStage = "Modelo encontrado: $candidate"
-                    initProgress = 5
+                    initProgress = 0.05f
                     break
                 }
             }
 
+            // Then check app's filesDir
             if (modelPath == null) {
                 for (candidate in modelCandidates) {
                     val path = File(filesDir, candidate).absolutePath
@@ -142,12 +143,13 @@ fun ChatScreen() {
                         modelPath = path
                         AppLogger.d(TAG, "Found model: $candidate at $path")
                         initStage = "Modelo encontrado: $candidate"
-                        initProgress = 5
+                        initProgress = 0.05f
                         break
                     }
                 }
             }
 
+            // Finally check sdcard
             if (modelPath == null) {
                 for (candidate in modelCandidates) {
                     val path = "/sdcard/$candidate"
@@ -156,7 +158,7 @@ fun ChatScreen() {
                         modelPath = path
                         AppLogger.d(TAG, "Found model on sdcard: $candidate at $path")
                         initStage = "Modelo encontrado: $candidate"
-                        initProgress = 5
+                        initProgress = 0.05f
                         break
                     }
                 }
@@ -170,16 +172,26 @@ fun ChatScreen() {
 
             AppLogger.i(TAG, "Loading model from: $modelPath")
             initStage = "Carregando modelo..."
+            initProgress = 0.1f
 
-            LlmChatModelHelper.initialize(context, modelPath) { stage, progress ->
-                initStage = stage
-                initProgress = progress
+            // Run initialization on IO thread with UI-safe callbacks
+            withContext(Dispatchers.IO) {
+                LlmChatModelHelper.initialize(context, modelPath) { stage, progress ->
+                    // Post to main thread for Compose recomposition
+                    mainHandler.post {
+                        initStage = stage
+                        initProgress = progress / 100f
+                        AppLogger.d(TAG, "[PROGRESS] $stage ($progress%)")
+                    }
+                }
             }
+
             isModelReady = true
             isInitializing = false
             memoryInfo = LlmChatModelHelper.getMemoryUsage()
-            AppLogger.i(TAG, "Model initialized successfully!")
             initStage = "Pronto!"
+            initProgress = 1f
+            AppLogger.i(TAG, "Model initialized successfully!")
             Toast.makeText(context, "Model ready!", Toast.LENGTH_SHORT).show()
             snackbarHostState.showSnackbar("Modelo pronto!")
         } catch (e: Exception) {
@@ -252,12 +264,12 @@ fun ChatScreen() {
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     LinearProgressIndicator(
-                        progress = { initProgress / 100f },
+                        progress = { initProgress },
                         modifier = Modifier.fillMaxWidth(0.8f),
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "$initProgress%",
+                        text = "${(initProgress * 100).toInt()}%",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

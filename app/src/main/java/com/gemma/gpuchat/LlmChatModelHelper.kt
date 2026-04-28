@@ -1,7 +1,6 @@
 package com.gemma.gpuchat
 
 import android.content.Context
-import android.os.ParcelFileDescriptor
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.Engine
@@ -10,7 +9,6 @@ import com.google.ai.edge.litertlm.Conversation
 import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.MessageCallback
 import java.io.File
-import java.io.FileInputStream
 
 object LlmChatModelHelper {
     private var engine: Engine? = null
@@ -41,7 +39,11 @@ object LlmChatModelHelper {
         val modelSizeMb: Long
     )
 
-    fun initialize(context: Context, modelPath: String, onProgress: (String, Int) -> Unit = { _, _ -> }) {
+    fun initialize(
+        context: Context,
+        modelPath: String,
+        onProgress: (String, Int) -> Unit = { _, _ -> }
+    ) {
         AppLogger.d(TAG, ">>> initialize() CALLED <<<")
         AppLogger.d(TAG, "modelPath: $modelPath")
         AppLogger.d(TAG, "filesDir: ${context.filesDir}")
@@ -88,7 +90,12 @@ object LlmChatModelHelper {
         }
     }
 
-    private fun initializeWithBackend(context: Context, modelPath: String, backend: Backend, onProgress: (String, Int) -> Unit = { _, _ -> }) {
+    private fun initializeWithBackend(
+        context: Context,
+        modelPath: String,
+        backend: Backend,
+        onProgress: (String, Int) -> Unit = { _, _ -> }
+    ) {
         AppLogger.d(TAG, "Backend: $backend (maxNumTokens=2048)")
 
         // If path is on sdcard, try to copy to internal storage for native access
@@ -118,26 +125,29 @@ object LlmChatModelHelper {
             actualPath = modelPath
         }
 
+        AppLogger.d(TAG, "EngineConfig created with path: $actualPath")
+        AppLogger.d(TAG, "Creating Engine instance...")
+        AppLogger.d(TAG, "[PROGRESS] Criando engine... (30%)")
+        onProgress("Criando engine...", 30)
+
         val engineConfig = EngineConfig(
             modelPath = actualPath,
             backend = backend,
             maxNumTokens = 2048
         )
-        AppLogger.d(TAG, "EngineConfig created with path: $actualPath")
-        AppLogger.d(TAG, "Creating Engine instance...")
-        onProgress("Criando engine...", 30)
-
         engine = Engine(engineConfig)
         AppLogger.d(TAG, "Engine instance created, calling initialize()...")
+        AppLogger.d(TAG, "[PROGRESS] Inicializando modelo (pode levar 10-20s)... (40%)")
         onProgress("Inicializando modelo (pode levar 10-20s)...", 40)
 
         engine!!.initialize()
         AppLogger.d(TAG, "engine.initialize() returned successfully")
-        onProgress("Engine initialized, criando conversa...", 80)
+        onProgress("Engine initialized, criando conversa...", 70)
 
         AppLogger.d(TAG, "Creating conversation...")
         conversation = engine!!.createConversation()
         AppLogger.d(TAG, "Conversation created: $conversation")
+        AppLogger.d(TAG, "[PROGRESS] Conversa pronta! (90%)")
         onProgress("Conversa pronta!", 90)
 
         AppLogger.i(TAG, ">>> INITIALIZATION COMPLETE (backend=$backend) <<<")
