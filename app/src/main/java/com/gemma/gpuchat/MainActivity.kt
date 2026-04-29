@@ -440,9 +440,7 @@ fun ChatScreen() {
                             messages = messages + userMessage
                             inputText = ""
 
-                            var modelResponseId = ""
                             messages = messages + ChatMessage(
-                                id = modelResponseId,
                                 text = "",
                                 isUser = false
                             )
@@ -461,9 +459,6 @@ fun ChatScreen() {
                                 },
                                 onDone = {
                                     AppLogger.i(TAG, "Response complete")
-                                    scope.launch {
-                                        snackbarHostState.showSnackbar("Response complete")
-                                    }
                                 },
                                 onError = { error ->
                                     AppLogger.e(TAG, "Error: ${error.message}", error)

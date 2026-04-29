@@ -91,6 +91,7 @@ bd close <id>         # Complete work
 - Device ADB WiFi disconnects when phone sleeps — may need `adb connect` after device wakes
 - User requires beads issue for every bug — always create and claim before investigating
 - User demands thorough logcat inspection for errors — never skip logcat check when debugging
+- On Nubia/Android 15, logcat has a global silent filter `[log.tag]: [S]` that suppresses app tags even when per-tag props are set; use `adb logcat -v time --pid=<PID>` with `--pid` to bypass the global filter entirely
 
 ## Learned Workspace Facts
 
@@ -100,6 +101,8 @@ bd close <id>         # Complete work
 - Callbacks from LiteRT-LM may come from background threads — use `mainHandler.post {}` to post UI updates safely in Compose
 - App-level log file: `gemma_startup.nlog` in app filesDir (use "Show Logs" button or `run-as com.gemma.gpuchat cat files/gemma_startup.nlog`)
 - Screen crashes in Compose may not appear in logcat — always cross-check with app nlog file
+- On Nubia/Android 15, app crashes may be written to Android `dropbox` instead of visible `logcat`; see `ADB_QUICKREF.md` section "Extrair crash via Dropbox" and use `adb shell dumpsys dropbox --print data_app_crash`
+- Compose LazyColumn with `items(messages, key = { it.id })` crashes with `IllegalArgumentException: Key "" was already used` when manual user messages use empty string id; always let ChatMessage use default UUID — never assign `id = ""` or empty string to message keys
 - Freeze/hang without FATAL in logcat is usually a Compose thread-safety issue, not a real crash — check nlog for token completion
 - Use `safe_run_detached` for long-running operations (ADB push of 2.5GB files takes ~4-5 min over WiFi)
 - Pre-built LiteRT-LM models for Android: check `litert-community` namespace on HuggingFace before attempting custom conversion
