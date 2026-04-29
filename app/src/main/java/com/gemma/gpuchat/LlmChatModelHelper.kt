@@ -170,20 +170,43 @@ object LlmChatModelHelper {
         }
 
         val callback = object : MessageCallback {
+            private var done = false
+
             override fun onMessage(message: Message) {
+                if (done) {
+                    AppLogger.w(TAG, "onMessage received after onDone - ignoring")
+                    return
+                }
                 val text = message.toString()
                 AppLogger.d(TAG, "onMessage: '$text'")
-                onToken(text)
+                try {
+                    onToken(text)
+                } catch (e: Exception) {
+                    AppLogger.e(TAG, "onToken callback threw: ${e.message}", e)
+                }
             }
 
             override fun onDone() {
+                if (done) {
+                    AppLogger.w(TAG, "onDone called twice - ignoring")
+                    return
+                }
+                done = true
                 AppLogger.i(TAG, "onDone")
-                onDone()
+                try {
+                    onDone()
+                } catch (e: Exception) {
+                    AppLogger.e(TAG, "onDone callback threw: ${e.message}", e)
+                }
             }
 
             override fun onError(throwable: Throwable) {
                 AppLogger.e(TAG, "onError: ${throwable.message}", throwable)
-                onError(throwable)
+                try {
+                    onError(throwable)
+                } catch (e: Exception) {
+                    AppLogger.e(TAG, "onError callback threw: ${e.message}", e)
+                }
             }
         }
 
