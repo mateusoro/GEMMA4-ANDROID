@@ -82,3 +82,17 @@ bd close <id>         # Complete work
 - NEVER say "ready to push when you are" - YOU must push
 - If push fails, resolve and retry until it succeeds
 <!-- END BEADS INTEGRATION -->
+
+## Learned User Preferences
+
+- **Verify BEFORE closing issues** — user explicitly called out closing without device verification as unacceptable; always confirm with device logs before closing
+- User speaks Portuguese
+- User uses `adb shell setprop log.tag <TAG> <LEVEL>` to configure logging for debugging (e.g., VERBOSE, INFO, ERROR)
+
+## Learned Workspace Facts
+
+- Android app with LiteRT-LM GPU backend (Gemma3-1B model, 557MB at /data/local/tmp/gemma3-1b-it-q4.litertlm)
+- Device: ADB at 192.168.0.17:39209 (Nubia/ZTE RedMagic gaming phone)
+- Compose UI with Kotlin; async callbacks from LiteRT-LM must not capture mutable `var` refs in closures — use `indexOfLast { !it.isUser }` to find bot message index dynamically
+- App-level log file: `gemma_startup.nlog` in app filesDir (use "Show Logs" button or `run-as com.gemma.gpuchat cat files/gemma_startup.nlog`)
+- Screen crashes in Compose may not appear in logcat — always cross-check with app nlog file
