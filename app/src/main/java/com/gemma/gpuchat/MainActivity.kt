@@ -452,8 +452,7 @@ fun ChatScreen() {
                                 onToken = { token ->
                                     AppLogger.d(TAG, "Token: $token")
                                     messages = messages.mapIndexed { index, msg ->
-                                        if (index == messages.lastIndex && !msg.isUser) {
-                                            modelResponseId = msg.id
+                                        if (index == getLastBotMessageIndex(messages) && !msg.isUser) {
                                             msg.copy(text = msg.text + token)
                                         } else msg
                                     }
