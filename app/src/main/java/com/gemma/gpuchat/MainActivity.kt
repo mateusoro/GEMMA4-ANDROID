@@ -451,10 +451,12 @@ fun ChatScreen() {
                                 message = userMessage.text,
                                 onToken = { token ->
                                     AppLogger.d(TAG, "Token: $token")
-                                    messages = messages.mapIndexed { index, msg ->
-                                        if (index == getLastBotMessageIndex(messages) && !msg.isUser) {
-                                            msg.copy(text = msg.text + token)
-                                        } else msg
+                                    mainHandler.post {
+                                        messages = messages.mapIndexed { index, msg ->
+                                            if (index == getLastBotMessageIndex(messages) && !msg.isUser) {
+                                                msg.copy(text = msg.text + token)
+                                            } else msg
+                                        }
                                     }
                                 },
                                 onDone = {
