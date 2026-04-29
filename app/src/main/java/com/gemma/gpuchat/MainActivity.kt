@@ -111,6 +111,7 @@ fun ChatScreen() {
 
         try {
             val modelCandidates = listOf(
+                "gemma-4-E2B-it.litertlm",
                 "gemma3-1b-it-q4.litertlm",
                 "gemma4_generic.litertlm",
                 "Gemma3-1B-IT.litertlm",
