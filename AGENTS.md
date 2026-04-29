@@ -89,14 +89,19 @@ bd close <id>         # Complete work
 - User speaks Portuguese
 - User uses `adb shell setprop log.tag <TAG> <LEVEL>` to configure logging (e.g., VERBOSE, INFO, ERROR)
 - Device ADB WiFi disconnects when phone sleeps — may need `adb connect` after device wakes
+- User requires beads issue for every bug — always create and claim before investigating
+- User demands thorough logcat inspection for errors — never skip logcat check when debugging
 
 ## Learned Workspace Facts
 
 - Android app with LiteRT-LM GPU backend (Gemma-4-E2B-IT model, 2.46GB at /data/local/tmp/gemma-4-E2B-it.litertlm)
-- Device: ADB at 192.168.0.17:39209 (Nubia/ZTE RedMagic gaming phone)
+- Device: ADB at 192.168.0.17 but port changes frequently (39209, 45387, 42881) — always reconnect after sleep
 - Compose UI with Kotlin; async callbacks from LiteRT-LM must not capture mutable `var` refs in closures — use `indexOfLast { !it.isUser }` to find bot message index dynamically
+- Callbacks from LiteRT-LM may come from background threads — use `mainHandler.post {}` to post UI updates safely in Compose
 - App-level log file: `gemma_startup.nlog` in app filesDir (use "Show Logs" button or `run-as com.gemma.gpuchat cat files/gemma_startup.nlog`)
 - Screen crashes in Compose may not appear in logcat — always cross-check with app nlog file
+- Freeze/hang without FATAL in logcat is usually a Compose thread-safety issue, not a real crash — check nlog for token completion
 - Use `safe_run_detached` for long-running operations (ADB push of 2.5GB files takes ~4-5 min over WiFi)
 - Pre-built LiteRT-LM models for Android: check `litert-community` namespace on HuggingFace before attempting custom conversion
 - Use helper function (`sendAutoMessage`) for chaining auto-messages in Compose to avoid deeply nested callback pyramids
+- Native heap can reach 300MB+ with Gemma-4 model loaded — memory intensive but stable
