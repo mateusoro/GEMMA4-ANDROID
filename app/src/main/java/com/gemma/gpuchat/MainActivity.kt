@@ -204,6 +204,70 @@ fun ChatScreen() {
         }
     }
 
+    // Auto message state: 0=none sent, 1="Olá" sent, 2="Qual a sua LLM" sent
+    var autoMessageState by remember { mutableStateOf(0) }
+
+    // Auto-send "Olá" when model becomes ready
+    LaunchedEffect(isModelReady) {
+        if (isModelReady && autoMessageState == 0) {
+            AppLogger.i(TAG, "Model ready - auto-sending Olá")
+            autoMessageState = 1
+
+            val userMessage = ChatMessage(text = "Olá", isUser = true)
+            messages = messages + userMessage
+
+            var modelResponseId = ""
+            val botMsg = ChatMessage(id = modelResponseId, text = "", isUser = false)
+            messages = messages + botMsg
+
+            LlmChatModelHelper.sendMessage(
+                message = userMessage.text,
+                onToken = { token ->
+                    AppLogger.d(TAG, "[OLA-RESPONSE-TOKEN] $token")
+                    messages = messages.mapIndexed { index, msg ->
+                        if (index == messages.lastIndex && !msg.isUser) {
+                            modelResponseId = msg.id
+                            msg.copy(text = msg.text + token)
+                        } else msg
+                    }
+                },
+                onDone = {
+                    AppLogger.i(TAG, "[OLA-RESPONSE-DONE] Response complete")
+                    // Now send "Qual a sua LLM"
+                    autoMessageState = 2
+                    val userMessage2 = ChatMessage(text = "Qual a sua LLM", isUser = true)
+                    messages = messages + userMessage2
+
+                    var modelResponseId2 = ""
+                    val botMsg2 = ChatMessage(id = modelResponseId2, text = "", isUser = false)
+                    messages = messages + botMsg2
+
+                    LlmChatModelHelper.sendMessage(
+                        message = userMessage2.text,
+                        onToken = { token ->
+                            AppLogger.d(TAG, "[LLM-RESPONSE-TOKEN] $token")
+                            messages = messages.mapIndexed { index, msg ->
+                                if (index == messages.lastIndex && !msg.isUser) {
+                                    modelResponseId2 = msg.id
+                                    msg.copy(text = msg.text + token)
+                                } else msg
+                            }
+                        },
+                        onDone = {
+                            AppLogger.i(TAG, "[LLM-RESPONSE-DONE] Response complete")
+                        },
+                        onError = { error ->
+                            AppLogger.e(TAG, "[LLM-RESPONSE-ERROR] ${error.message}", error)
+                        }
+                    )
+                },
+                onError = { error ->
+                    AppLogger.e(TAG, "[OLA-RESPONSE-ERROR] ${error.message}", error)
+                }
+            )
+        }
+    }
+
     // Cleanup on dispose
     DisposableEffect(Unit) {
         onDispose {
