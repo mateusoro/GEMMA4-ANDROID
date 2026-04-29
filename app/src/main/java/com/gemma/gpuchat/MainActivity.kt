@@ -210,8 +210,36 @@ fun ChatScreen() {
         return msgs.indexOfLast { !it.isUser }
     }
 
-    // Auto message state: 0=none sent, 1="Olá" sent, 2="Qual a sua LLM" sent
+    // Auto message state: 0=none, 1="Olá", 2="Qual a sua LLM", 3="O que voce sabe fazer", 4="Se apresente"
     var autoMessageState by remember { mutableStateOf(0) }
+
+    // Helper to send a message and chain to next state
+    fun sendAutoMessage(text: String, nextState: Int, onDone: () -> Unit) {
+        val userMsg = ChatMessage(text = text, isUser = true)
+        messages = messages + userMsg
+        val botMsg = ChatMessage(text = "", isUser = false)
+        messages = messages + botMsg
+        val prefix = "AUTO$nextState"
+        LlmChatModelHelper.sendMessage(
+            message = text,
+            onToken = { token ->
+                AppLogger.d(TAG, "[$prefix-TOKEN] $token")
+                messages = messages.mapIndexed { index, msg ->
+                    if (index == getLastBotMessageIndex(messages) && !msg.isUser) {
+                        msg.copy(text = msg.text + token)
+                    } else msg
+                }
+            },
+            onDone = {
+                AppLogger.i(TAG, "[$prefix-DONE] Response complete")
+                autoMessageState = nextState
+                onDone()
+            },
+            onError = { error ->
+                AppLogger.e(TAG, "[$prefix-ERROR] ${error.message}", error)
+            }
+        )
+    }
 
     // Auto-send "Olá" when model becomes ready
     LaunchedEffect(isModelReady) {
@@ -238,30 +266,15 @@ fun ChatScreen() {
                 onDone = {
                     AppLogger.i(TAG, "[OLA-RESPONSE-DONE] Response complete")
                     // Now send "Qual a sua LLM"
-                    autoMessageState = 2
-                    val userMessage2 = ChatMessage(text = "Qual a sua LLM", isUser = true)
-                    messages = messages + userMessage2
-
-                    val botMsg2 = ChatMessage(text = "", isUser = false)
-                    messages = messages + botMsg2
-
-                    LlmChatModelHelper.sendMessage(
-                        message = userMessage2.text,
-                        onToken = { token ->
-                            AppLogger.d(TAG, "[LLM-RESPONSE-TOKEN] $token")
-                            messages = messages.mapIndexed { index, msg ->
-                                if (index == getLastBotMessageIndex(messages) && !msg.isUser) {
-                                    msg.copy(text = msg.text + token)
-                                } else msg
+                    sendAutoMessage("Qual a sua LLM", 2) {
+                        // Now send "O que você sabe fazer"
+                        sendAutoMessage("O que você sabe fazer?", 3) {
+                            // Now send "Se apresente"
+                            sendAutoMessage("Se apresente", 4) {
+                                AppLogger.i(TAG, "All 4 auto messages complete")
                             }
-                        },
-                        onDone = {
-                            AppLogger.i(TAG, "[LLM-RESPONSE-DONE] Response complete")
-                        },
-                        onError = { error ->
-                            AppLogger.e(TAG, "[LLM-RESPONSE-ERROR] ${error.message}", error)
                         }
-                    )
+                    }
                 },
                 onError = { error ->
                     AppLogger.e(TAG, "[OLA-RESPONSE-ERROR] ${error.message}", error)

@@ -87,12 +87,16 @@ bd close <id>         # Complete work
 
 - **Verify BEFORE closing issues** — user explicitly called out closing without device verification as unacceptable; always confirm with device logs before closing
 - User speaks Portuguese
-- User uses `adb shell setprop log.tag <TAG> <LEVEL>` to configure logging for debugging (e.g., VERBOSE, INFO, ERROR)
+- User uses `adb shell setprop log.tag <TAG> <LEVEL>` to configure logging (e.g., VERBOSE, INFO, ERROR)
+- Device ADB WiFi disconnects when phone sleeps — may need `adb connect` after device wakes
 
 ## Learned Workspace Facts
 
-- Android app with LiteRT-LM GPU backend (Gemma3-1B model, 557MB at /data/local/tmp/gemma3-1b-it-q4.litertlm)
+- Android app with LiteRT-LM GPU backend (Gemma-4-E2B-IT model, 2.46GB at /data/local/tmp/gemma-4-E2B-it.litertlm)
 - Device: ADB at 192.168.0.17:39209 (Nubia/ZTE RedMagic gaming phone)
 - Compose UI with Kotlin; async callbacks from LiteRT-LM must not capture mutable `var` refs in closures — use `indexOfLast { !it.isUser }` to find bot message index dynamically
 - App-level log file: `gemma_startup.nlog` in app filesDir (use "Show Logs" button or `run-as com.gemma.gpuchat cat files/gemma_startup.nlog`)
 - Screen crashes in Compose may not appear in logcat — always cross-check with app nlog file
+- Use `safe_run_detached` for long-running operations (ADB push of 2.5GB files takes ~4-5 min over WiFi)
+- Pre-built LiteRT-LM models for Android: check `litert-community` namespace on HuggingFace before attempting custom conversion
+- Use helper function (`sendAutoMessage`) for chaining auto-messages in Compose to avoid deeply nested callback pyramids
