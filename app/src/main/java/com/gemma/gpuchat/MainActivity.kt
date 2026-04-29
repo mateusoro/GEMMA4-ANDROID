@@ -204,6 +204,11 @@ fun ChatScreen() {
         }
     }
 
+    // Helper to find last bot message index safely
+    fun getLastBotMessageIndex(msgs: List<ChatMessage>): Int {
+        return msgs.indexOfLast { !it.isUser }
+    }
+
     // Auto message state: 0=none sent, 1="Olá" sent, 2="Qual a sua LLM" sent
     var autoMessageState by remember { mutableStateOf(0) }
 
@@ -216,8 +221,7 @@ fun ChatScreen() {
             val userMessage = ChatMessage(text = "Olá", isUser = true)
             messages = messages + userMessage
 
-            var modelResponseId = ""
-            val botMsg = ChatMessage(id = modelResponseId, text = "", isUser = false)
+            val botMsg = ChatMessage(text = "", isUser = false)
             messages = messages + botMsg
 
             LlmChatModelHelper.sendMessage(
@@ -225,8 +229,7 @@ fun ChatScreen() {
                 onToken = { token ->
                     AppLogger.d(TAG, "[OLA-RESPONSE-TOKEN] $token")
                     messages = messages.mapIndexed { index, msg ->
-                        if (index == messages.lastIndex && !msg.isUser) {
-                            modelResponseId = msg.id
+                        if (index == getLastBotMessageIndex(messages) && !msg.isUser) {
                             msg.copy(text = msg.text + token)
                         } else msg
                     }
@@ -238,8 +241,7 @@ fun ChatScreen() {
                     val userMessage2 = ChatMessage(text = "Qual a sua LLM", isUser = true)
                     messages = messages + userMessage2
 
-                    var modelResponseId2 = ""
-                    val botMsg2 = ChatMessage(id = modelResponseId2, text = "", isUser = false)
+                    val botMsg2 = ChatMessage(text = "", isUser = false)
                     messages = messages + botMsg2
 
                     LlmChatModelHelper.sendMessage(
@@ -247,8 +249,7 @@ fun ChatScreen() {
                         onToken = { token ->
                             AppLogger.d(TAG, "[LLM-RESPONSE-TOKEN] $token")
                             messages = messages.mapIndexed { index, msg ->
-                                if (index == messages.lastIndex && !msg.isUser) {
-                                    modelResponseId2 = msg.id
+                                if (index == getLastBotMessageIndex(messages) && !msg.isUser) {
                                     msg.copy(text = msg.text + token)
                                 } else msg
                             }
