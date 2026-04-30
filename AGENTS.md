@@ -108,3 +108,7 @@ bd close <id>         # Complete work
 - Pre-built LiteRT-LM models for Android: check `litert-community` namespace on HuggingFace before attempting custom conversion
 - Use helper function (`sendAutoMessage`) for chaining auto-messages in Compose to avoid deeply nested callback pyramids
 - Native heap can reach 300MB+ with Gemma-4 model loaded — memory intensive but stable
+- Gemma-4-E2B-IT `.litertlm` already uses mixed 2/4/8-bit per-layer quantization — no separate Q2_K download exists; file size 2.58 GB, with 0.79 GB decoder weights always in memory and 1.12 GB embeddings memory-mapped (fraction used per inference)
+- Android GPU working memory: ~676 MB on S26 Ultra (Snapdragon 8 Elite); Android CPU working memory: ~1,733 MB via XNNPack; GPU VRAM allocation for weights estimated ~2.46 GB
+- Context window scales KV cache memory dynamically; Gemma-4 E2B supports up to 32K tokens via Shared KV Cache architecture
+- For memory investigation on Nubia: `adb shell dumpsys meminfo <pid>` after model load shows actual PSS/RSS split between GPU and CPU memory

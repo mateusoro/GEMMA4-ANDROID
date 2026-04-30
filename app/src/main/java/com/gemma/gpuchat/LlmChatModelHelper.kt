@@ -1,15 +1,19 @@
 package com.gemma.gpuchat
 
+import android.app.ActivityManager
 import android.content.Context
+import android.os.Debug
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
+import com.google.ai.edge.litertlm.ExperimentalApi
 import com.google.ai.edge.litertlm.Conversation
 import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.MessageCallback
 import java.io.File
 
+@OptIn(ExperimentalApi::class)
 object LlmChatModelHelper {
     private var engine: Engine? = null
     private var conversation: Conversation? = null
@@ -26,17 +30,37 @@ object LlmChatModelHelper {
         val freeMem = runtime.freeMemory()
         val usedMem = totalMem - freeMem
         val maxMem = runtime.maxMemory()
+        val nativeHeap = Debug.getNativeHeapAllocatedSize()
         return MemoryInfo(
             appUsedMb = usedMem / (1024 * 1024),
             appTotalMb = maxMem / (1024 * 1024),
-            modelSizeMb = loadedModelSizeBytes / (1024 * 1024)
+            modelSizeMb = loadedModelSizeBytes / (1024 * 1024),
+            nativeHeapMb = nativeHeap / (1024 * 1024)
+        )
+    }
+
+    fun getSystemMemory(context: Context): SystemMemoryInfo {
+        val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        val memInfo = ActivityManager.MemoryInfo()
+        activityManager.getMemoryInfo(memInfo)
+        return SystemMemoryInfo(
+            totalMb = memInfo.totalMem / (1024 * 1024),
+            availableMb = memInfo.availMem / (1024 * 1024),
+            usedMb = memInfo.totalMem / (1024 * 1024) - memInfo.availMem / (1024 * 1024)
         )
     }
 
     data class MemoryInfo(
         val appUsedMb: Long,
         val appTotalMb: Long,
-        val modelSizeMb: Long
+        val modelSizeMb: Long,
+        val nativeHeapMb: Long
+    )
+
+    data class SystemMemoryInfo(
+        val totalMb: Long,
+        val availableMb: Long,
+        val usedMb: Long
     )
 
     fun initialize(

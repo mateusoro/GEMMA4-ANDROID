@@ -20,12 +20,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -98,6 +101,11 @@ fun ChatScreen() {
     var initProgress by remember { mutableStateOf(0f) }
     var isInitializing by remember { mutableStateOf(true) }
     var memoryInfo by remember { mutableStateOf<LlmChatModelHelper.MemoryInfo?>(null) }
+    var systemMemoryInfo by remember { mutableStateOf<LlmChatModelHelper.SystemMemoryInfo?>(null) }
+    var throughput by remember { mutableStateOf(0f) }
+    var lastResponseTokenCount by remember { mutableStateOf(0) }
+    var lastResponseDurationMs by remember { mutableStateOf(0L) }
+    var responseStartTime by remember { mutableStateOf(0L) }
 
     // Handler for UI thread updates from background callbacks
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
@@ -190,6 +198,7 @@ fun ChatScreen() {
             isModelReady = true
             isInitializing = false
             memoryInfo = LlmChatModelHelper.getMemoryUsage()
+            systemMemoryInfo = LlmChatModelHelper.getSystemMemory(context)
             initStage = "Pronto!"
             initProgress = 1f
             AppLogger.i(TAG, "Model initialized successfully!")
@@ -301,7 +310,43 @@ fun ChatScreen() {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Gemma 4 GPU Chat") },
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(
+                            text = "Chat",
+                            style = MaterialTheme.typography.titleLarge
+                        )
+                        Divider(
+                            modifier = Modifier
+                                .height(24.dp)
+                                .width(1.dp),
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                        systemMemoryInfo?.let { sys ->
+                            val usedGb = sys.usedMb / 1024.0
+                            val totalGb = sys.totalMb / 1024.0
+                            Text(
+                                text = "RAM: ${String.format("%.1f", usedGb)}/${String.format("%.1f", totalGb)}GB",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Divider(
+                            modifier = Modifier
+                                .height(24.dp)
+                                .width(1.dp),
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                        Text(
+                            text = "Tokens/s: ${String.format("%.1f", throughput)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                },
                 actions = {
                     Button(onClick = {
                         logContent = AppLogger.readLogFile()
@@ -360,7 +405,7 @@ fun ChatScreen() {
                             color = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            text = "Memória app: ${mem.appUsedMb} MB / ${mem.appTotalMb} MB",
+                            text = "App: ${mem.appUsedMb} MB | Native: ${mem.nativeHeapMb} MB",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -406,8 +451,11 @@ fun ChatScreen() {
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     item { Spacer(modifier = Modifier.height(8.dp)) }
-                    items(messages, key = { it.id }) { message ->
-                        ChatBubble(message = message)
+                    items(messages) { message ->
+                        ChatBubble(
+                            message = message,
+                            showMetrics = !message.isUser && message.tokenCount > 0
+                        )
                     }
                     item { Spacer(modifier = Modifier.height(8.dp)) }
                 }
@@ -430,7 +478,11 @@ fun ChatScreen() {
                     )
                     Button(
                         onClick = {
-                            if (inputText.isBlank() || !isModelReady) return@Button
+                            AppLogger.i(TAG, "SEND BUTTON CLICKED isModelReady=$isModelReady inputBlank=${inputText.isBlank()}")
+                            if (inputText.isBlank() || !isModelReady) {
+                                AppLogger.i(TAG, "SEND BLOCKED: blank=$inputText.isBlank() ready=$isModelReady")
+                                return@Button
+                            }
 
                             AppLogger.d(TAG, "User sent: $inputText")
                             val userMessage = ChatMessage(
@@ -440,6 +492,7 @@ fun ChatScreen() {
                             messages = messages + userMessage
                             inputText = ""
 
+                            val startTime = System.currentTimeMillis()
                             messages = messages + ChatMessage(
                                 text = "",
                                 isUser = false
@@ -450,15 +503,39 @@ fun ChatScreen() {
                                 onToken = { token ->
                                     AppLogger.d(TAG, "Token: $token")
                                     mainHandler.post {
-                                        messages = messages.mapIndexed { index, msg ->
-                                            if (index == getLastBotMessageIndex(messages) && !msg.isUser) {
-                                                msg.copy(text = msg.text + token)
-                                            } else msg
+                                        val lastBotIdx = messages.indexOfLast { !it.isUser }
+                                        AppLogger.d(TAG, "onToken: lastBotIdx=$lastBotIdx messages=${messages.size}")
+                                        if (lastBotIdx >= 0) {
+                                            val currentMsg = messages[lastBotIdx]
+                                            messages = messages.mapIndexed { idx, msg ->
+                                                if (idx == lastBotIdx) {
+                                                    msg.copy(text = msg.text + token)
+                                                } else msg
+                                            }
                                         }
                                     }
                                 },
                                 onDone = {
-                                    AppLogger.i(TAG, "Response complete")
+                                    AppLogger.i(TAG, "onDone callback fired")
+                                    mainHandler.post {
+                                        AppLogger.i(TAG, "onDone mainHandler.post running")
+                                        memoryInfo = LlmChatModelHelper.getMemoryUsage()
+                                        systemMemoryInfo = LlmChatModelHelper.getSystemMemory(context)
+                                        val lastBotIdx = messages.indexOfLast { !it.isUser }
+                                        AppLogger.i(TAG, "onDone: lastBotIdx=$lastBotIdx totalMessages=${messages.size}")
+                                        if (lastBotIdx >= 0) {
+                                            val tokenCount = messages[lastBotIdx].text.length
+                                            val duration = System.currentTimeMillis() - startTime
+                                            val tp = if (duration > 0) (tokenCount * 1000f) / duration else 0f
+                                            AppLogger.i(TAG, "Throughput: tp=$tp count=$tokenCount duration=$duration")
+                                            messages = messages.mapIndexed { idx, msg ->
+                                                if (idx == lastBotIdx) {
+                                                    msg.copy(throughput = tp, tokenCount = tokenCount, durationMs = duration)
+                                                } else msg
+                                            }
+                                            AppLogger.i(TAG, "onDone: metrics attached to message idx=$lastBotIdx tp=$tp")
+                                        }
+                                    }
                                 },
                                 onError = { error ->
                                     AppLogger.e(TAG, "Error: ${error.message}", error)
@@ -479,7 +556,7 @@ fun ChatScreen() {
 }
 
 @Composable
-fun ChatBubble(message: ChatMessage) {
+fun ChatBubble(message: ChatMessage, showMetrics: Boolean = false) {
     val isUser = message.isUser
     val backgroundColor = if (isUser) {
         MaterialTheme.colorScheme.primary
@@ -496,25 +573,37 @@ fun ChatBubble(message: ChatMessage) {
         modifier = Modifier.fillMaxWidth(),
         contentAlignment = if (isUser) Alignment.CenterEnd else Alignment.CenterStart
     ) {
-        Box(
-            modifier = Modifier
-                .widthIn(max = 280.dp)
-                .background(
-                    color = backgroundColor,
-                    shape = RoundedCornerShape(
-                        topStart = 16.dp,
-                        topEnd = 16.dp,
-                        bottomStart = if (isUser) 16.dp else 4.dp,
-                        bottomEnd = if (isUser) 4.dp else 16.dp
-                    )
-                )
-                .padding(12.dp)
+        Column(
+            horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
         ) {
-            Text(
-                text = message.text,
-                color = textColor,
-                style = MaterialTheme.typography.bodyMedium
-            )
+            Box(
+                modifier = Modifier
+                    .widthIn(max = 280.dp)
+                    .background(
+                        color = backgroundColor,
+                        shape = RoundedCornerShape(
+                            topStart = 16.dp,
+                            topEnd = 16.dp,
+                            bottomStart = if (isUser) 16.dp else 4.dp,
+                            bottomEnd = if (isUser) 4.dp else 16.dp
+                        )
+                    )
+                    .padding(12.dp)
+            ) {
+                Text(
+                    text = message.text,
+                    color = textColor,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+            if (showMetrics && !isUser && message.throughput > 0) {
+                Text(
+                    text = "${String.format("%.1f", message.throughput)} tok/s • ${message.tokenCount} tokens • ${message.durationMs}ms",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp, start = 4.dp, end = 4.dp)
+                )
+            }
         }
     }
 }
@@ -522,5 +611,8 @@ fun ChatBubble(message: ChatMessage) {
 data class ChatMessage(
     val id: String = java.util.UUID.randomUUID().toString(),
     val text: String,
-    val isUser: Boolean
+    val isUser: Boolean,
+    val throughput: Float = 0f,
+    val tokenCount: Int = 0,
+    val durationMs: Long = 0L
 )
