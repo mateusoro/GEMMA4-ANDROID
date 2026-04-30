@@ -92,11 +92,13 @@ bd close <id>         # Complete work
 - User requires beads issue for every bug — always create and claim before investigating
 - User demands thorough logcat inspection for errors — never skip logcat check when debugging
 - On Nubia/Android 15, logcat has a global silent filter `[log.tag]: [S]` that suppresses app tags even when per-tag props are set; use `adb logcat -v time --pid=<PID>` with `--pid` to bypass the global filter entirely
+- User gives fast UI feedback (e.g., "espremido") and expects quick layout fixes — iterate quickly on UI tweaks
 
 ## Learned Workspace Facts
 
 - Android app with LiteRT-LM GPU backend (Gemma-4-E2B-IT model, 2.46GB at /data/local/tmp/gemma-4-E2B-it.litertlm)
-- Device: ADB at 192.168.0.17 but port changes frequently (39209, 45387, 42881) — always reconnect after sleep
+- Device: ADB at 192.168.0.17 but port changes frequently (39209, 45387, 42881, 36085) — always reconnect after sleep
+- On Windows, npm cache at `C:\ProgramData\npm\npm-cache` can cause EPERM errors; use `npm config set cache "$env:TEMP\npm-cache-alt"` to bypass
 - Compose UI with Kotlin; async callbacks from LiteRT-LM must not capture mutable `var` refs in closures — use `indexOfLast { !it.isUser }` to find bot message index dynamically
 - Callbacks from LiteRT-LM may come from background threads — use `mainHandler.post {}` to post UI updates safely in Compose
 - App-level log file: `gemma_startup.nlog` in app filesDir (use "Show Logs" button or `run-as com.gemma.gpuchat cat files/gemma_startup.nlog`)
@@ -104,11 +106,7 @@ bd close <id>         # Complete work
 - On Nubia/Android 15, app crashes may be written to Android `dropbox` instead of visible `logcat`; see `ADB_QUICKREF.md` section "Extrair crash via Dropbox" and use `adb shell dumpsys dropbox --print data_app_crash`
 - Compose LazyColumn with `items(messages, key = { it.id })` crashes with `IllegalArgumentException: Key "" was already used` when manual user messages use empty string id; always let ChatMessage use default UUID — never assign `id = ""` or empty string to message keys
 - Freeze/hang without FATAL in logcat is usually a Compose thread-safety issue, not a real crash — check nlog for token completion
+- `Divider` composable is deprecated in Material3 — use `HorizontalDivider` instead
 - Use `safe_run_detached` for long-running operations (ADB push of 2.5GB files takes ~4-5 min over WiFi)
 - Pre-built LiteRT-LM models for Android: check `litert-community` namespace on HuggingFace before attempting custom conversion
 - Use helper function (`sendAutoMessage`) for chaining auto-messages in Compose to avoid deeply nested callback pyramids
-- Native heap can reach 300MB+ with Gemma-4 model loaded — memory intensive but stable
-- Gemma-4-E2B-IT `.litertlm` already uses mixed 2/4/8-bit per-layer quantization — no separate Q2_K download exists; file size 2.58 GB, with 0.79 GB decoder weights always in memory and 1.12 GB embeddings memory-mapped (fraction used per inference)
-- Android GPU working memory: ~676 MB on S26 Ultra (Snapdragon 8 Elite); Android CPU working memory: ~1,733 MB via XNNPack; GPU VRAM allocation for weights estimated ~2.46 GB
-- Context window scales KV cache memory dynamically; Gemma-4 E2B supports up to 32K tokens via Shared KV Cache architecture
-- For memory investigation on Nubia: `adb shell dumpsys meminfo <pid>` after model load shows actual PSS/RSS split between GPU and CPU memory

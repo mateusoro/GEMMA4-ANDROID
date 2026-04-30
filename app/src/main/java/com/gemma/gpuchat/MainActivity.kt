@@ -313,15 +313,15 @@ fun ChatScreen() {
                 title = {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Text(
                             text = "Chat",
-                            style = MaterialTheme.typography.titleLarge
+                            style = MaterialTheme.typography.titleMedium
                         )
                         Divider(
                             modifier = Modifier
-                                .height(24.dp)
+                                .height(20.dp)
                                 .width(1.dp),
                             color = MaterialTheme.colorScheme.outline
                         )
@@ -334,17 +334,11 @@ fun ChatScreen() {
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        Divider(
-                            modifier = Modifier
-                                .height(24.dp)
-                                .width(1.dp),
-                            color = MaterialTheme.colorScheme.outline
-                        )
-                        Text(
-                            text = "Tokens/s: ${String.format("%.1f", throughput)}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                        // Text(
+                        //     text = "Tokens/s: ${String.format("%.1f", throughput)}",
+                        //     style = MaterialTheme.typography.bodySmall,
+                        //     color = MaterialTheme.colorScheme.primary
+                        // )
                     }
                 },
                 actions = {
