@@ -493,6 +493,57 @@ fun ChatScreen() {
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     }
                 }
+
+                HorizontalDivider()
+
+                // Settings button
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            scope.launch { drawerState.close() }
+                            showSettings = true
+                        }
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Refresh,
+                        contentDescription = "Settings",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = "Settings",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                // Show Logs button
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            scope.launch { drawerState.close() }
+                            logContent = AppLogger.readLogFile()
+                            showLogs = !showLogs
+                        }
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Refresh,
+                        contentDescription = "Show Logs",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = if (showLogs) "Hide Logs" else "Show Logs",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
             }
         }
     ) {
@@ -547,36 +598,6 @@ fun ChatScreen() {
                             contentDescription = "Menu",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { showSettings = true }) {
-                        Icon(
-                            imageVector = Icons.Filled.Refresh,
-                            contentDescription = "Settings",
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    IconButton(onClick = {
-                        logContent = AppLogger.readLogFile()
-                        showLogs = !showLogs
-                    }) {
-                        if (showLogs) {
-                            Icon(
-                                imageVector = Icons.Filled.Refresh,
-                                contentDescription = "Hide Logs",
-                                modifier = Modifier.size(20.dp),
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Filled.Refresh,
-                                contentDescription = "Show Logs",
-                                modifier = Modifier.size(20.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
                     }
                 }
             )
