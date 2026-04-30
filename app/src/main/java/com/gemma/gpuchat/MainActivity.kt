@@ -29,25 +29,29 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -57,8 +61,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -115,8 +123,18 @@ fun ChatScreen() {
     var lastResponseDurationMs by remember { mutableStateOf(0L) }
     var responseStartTime by remember { mutableStateOf(0L) }
 
+    // Settings dialog state
+    var showSettings by remember { mutableStateOf(false) }
+    var settings by remember { mutableStateOf(LlmPreferences.Settings()) }
+    var isReloading by remember { mutableStateOf(false) }
+
     // Handler for UI thread updates from background callbacks
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
+
+    // Load saved settings
+    LaunchedEffect(Unit) {
+        settings = LlmPreferences.getSettingsFlow(context).first()
+    }
 
     // Initialize model
     LaunchedEffect(Unit) {
@@ -192,8 +210,9 @@ fun ChatScreen() {
             initProgress = 0.1f
 
             // Run initialization on IO thread with UI-safe callbacks
+            val params = LlmPreferences.settingsToLlmParams(settings)
             withContext(Dispatchers.IO) {
-                LlmChatModelHelper.initialize(context, modelPath) { stage, progress ->
+                LlmChatModelHelper.initialize(context, modelPath, params) { stage, progress ->
                     // Post to main thread for Compose recomposition
                     mainHandler.post {
                         initStage = stage
@@ -384,6 +403,14 @@ fun ChatScreen() {
                     }
                 },
                 actions = {
+                    IconButton(onClick = { showSettings = true }) {
+                        Icon(
+                            imageVector = Icons.Filled.Refresh,
+                            contentDescription = "Settings",
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                     IconButton(onClick = {
                         logContent = AppLogger.readLogFile()
                         showLogs = !showLogs
@@ -606,6 +633,44 @@ fun ChatScreen() {
                 }
             }
         }
+
+        // Settings Dialog
+        if (showSettings) {
+            SettingsDialog(
+                settings = settings,
+                onSettingsChange = { newSettings ->
+                    settings = newSettings
+                    scope.launch {
+                        LlmPreferences.saveSettings(context, newSettings)
+                    }
+                },
+                onReload = {
+                    isReloading = true
+                    messages = emptyList()
+                    initStage = "Recarregando..."
+                    initProgress = 0f
+                    isInitializing = true
+                    scope.launch {
+                        val params = LlmPreferences.settingsToLlmParams(settings)
+                        LlmChatModelHelper.reload(params) { stage, progress ->
+                            mainHandler.post {
+                                initStage = stage
+                                initProgress = progress / 100f
+                            }
+                        }
+                        isInitializing = false
+                        isReloading = false
+                        isModelReady = true
+                        initStage = "Pronto!"
+                        initProgress = 1f
+                        memoryInfo = LlmChatModelHelper.getMemoryUsage()
+                        systemMemoryInfo = LlmChatModelHelper.getSystemMemory(context)
+                        snackbarHostState.showSnackbar("LLM recarregado com novos parametros!")
+                    }
+                },
+                onDismiss = { showSettings = false }
+            )
+        }
     }
 }
 
@@ -644,11 +709,18 @@ fun ChatBubble(message: ChatMessage, showMetrics: Boolean = false) {
                     )
                     .padding(12.dp)
             ) {
-                Text(
-                    text = message.text,
-                    color = textColor,
-                    style = MaterialTheme.typography.bodyMedium
-                )
+                if (isUser) {
+                    Text(
+                        text = message.text,
+                        color = textColor,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                } else {
+                    MarkdownText(
+                        text = message.text,
+                        color = textColor
+                    )
+                }
             }
             if (showMetrics && !isUser && message.throughput > 0) {
                 Text(
@@ -670,3 +742,156 @@ data class ChatMessage(
     val tokenCount: Int = 0,
     val durationMs: Long = 0L
 )
+
+@Composable
+fun MarkdownText(text: String, color: androidx.compose.ui.graphics.Color, modifier: Modifier = Modifier) {
+    val themeColor = MaterialTheme.colorScheme.primary
+    val parsed = remember(text) {
+        buildAnnotatedString {
+            var i = 0
+            val s = text
+            while (i < s.length) {
+                // Bold **text**
+                if (s.startsWith("**", i)) {
+                    val end = s.indexOf("**", i + 2)
+                    if (end != -1) {
+                        withStyle(style = androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.Bold)) {
+                            append(s.substring(i + 2, end))
+                        }
+                        i = end + 2
+                    } else { append(s[i]); i++ }
+                }
+                // Italic *text* (but not **)
+                else if (s.startsWith("*", i) && !s.startsWith("**", i)) {
+                    val end = s.indexOf("*", i + 1)
+                    if (end != -1 && end < s.length && s[end - 1] != '*') {
+                        withStyle(style = androidx.compose.ui.text.SpanStyle(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)) {
+                            append(s.substring(i + 1, end))
+                        }
+                        i = end + 1
+                    } else { append(s[i]); i++ }
+                }
+                // Inline `code`
+                else if (s.startsWith("`", i)) {
+                    val end = s.indexOf("`", i + 1)
+                    if (end != -1) {
+                        withStyle(style = androidx.compose.ui.text.SpanStyle(fontFamily = FontFamily.Monospace, color = themeColor)) {
+                            append(s.substring(i + 1, end))
+                        }
+                        i = end + 1
+                    } else { append(s[i]); i++ }
+                }
+                // Line starting with •
+                else if (s.startsWith("• ", i)) {
+                    append("  • ")
+                    i += 2
+                }
+                // Line starting with number and dot
+                else if (i + 2 < s.length && s[i].isDigit() && s[i + 1] == '.') {
+                    append(s.substring(i, i + 2))
+                    i += 2
+                }
+                // \n\n creates paragraph break
+                else if (s.startsWith("\n\n", i)) {
+                    append("\n")
+                    i += 2
+                }
+                // Regular character
+                else {
+                    append(s[i])
+                    i++
+                }
+            }
+        }
+    }
+    Text(
+        text = parsed,
+        color = color,
+        style = MaterialTheme.typography.bodyMedium,
+        modifier = modifier
+    )
+}
+
+@Composable
+fun SettingsDialog(
+    settings: LlmPreferences.Settings,
+    onSettingsChange: (LlmPreferences.Settings) -> Unit,
+    onReload: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    var maxTokens by remember { mutableStateOf(settings.maxTokens.toFloat()) }
+    var temperature by remember { mutableStateOf(settings.temperature) }
+    var topK by remember { mutableStateOf(settings.topK.toFloat()) }
+    var topP by remember { mutableStateOf(settings.topP) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("LLM Settings") },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                // Max Tokens
+                Text("Max Context Tokens: ${maxTokens.toInt()}")
+                Slider(
+                    value = maxTokens,
+                    onValueChange = { maxTokens = it },
+                    valueRange = 256f..8192f,
+                    steps = 30,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Temperature
+                Text("Temperature: ${String.format("%.2f", temperature)}")
+                Slider(
+                    value = temperature,
+                    onValueChange = { temperature = it },
+                    valueRange = 0.1f..2.0f,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Top K
+                Text("Top-K: ${topK.toInt()}")
+                Slider(
+                    value = topK,
+                    onValueChange = { topK = it },
+                    valueRange = 1f..100f,
+                    steps = 98,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Top P
+                Text("Top-P: ${String.format("%.2f", topP)}")
+                Slider(
+                    value = topP,
+                    onValueChange = { topP = it },
+                    valueRange = 0.5f..1.0f,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val newSettings = LlmPreferences.Settings(
+                        maxTokens = maxTokens.toInt(),
+                        temperature = temperature,
+                        topK = topK.toInt(),
+                        topP = topP
+                    )
+                    onSettingsChange(newSettings)
+                    onReload()
+                    onDismiss()
+                }
+            ) {
+                Text("Reload LLM")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}

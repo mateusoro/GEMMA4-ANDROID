@@ -5,9 +5,11 @@ import android.content.Context
 import android.os.Debug
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Contents
+import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.ExperimentalApi
+import com.google.ai.edge.litertlm.SamplerConfig
 import com.google.ai.edge.litertlm.Conversation
 import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.MessageCallback
@@ -21,6 +23,25 @@ object LlmChatModelHelper {
 
     // Memory info
     private var loadedModelSizeBytes: Long = 0L
+
+    // LLM Parameters
+    data class LlmParams(
+        val maxNumTokens: Int = 2048,
+        val temperature: Float = 0.8f,
+        val topK: Int = 10,
+        val topP: Float = 0.95f
+    )
+
+    private var currentParams: LlmParams = LlmParams()
+    private var currentModelPath: String = ""
+    private var currentContext: Context? = null
+
+    fun getParams(): LlmParams = currentParams
+
+    fun updateParams(params: LlmParams) {
+        currentParams = params
+        AppLogger.d(TAG, "Params updated: maxTokens=${params.maxNumTokens}, temp=${params.temperature}, topK=${params.topK}, topP=${params.topP}")
+    }
 
     fun getLoadedModelSizeBytes(): Long = loadedModelSizeBytes
 
@@ -66,10 +87,15 @@ object LlmChatModelHelper {
     fun initialize(
         context: Context,
         modelPath: String,
+        params: LlmParams = LlmParams(),
         onProgress: (String, Int) -> Unit = { _, _ -> }
     ) {
+        currentParams = params
+        currentModelPath = modelPath
+        currentContext = context
         AppLogger.d(TAG, ">>> initialize() CALLED <<<")
         AppLogger.d(TAG, "modelPath: $modelPath")
+        AppLogger.d(TAG, "params: maxTokens=${params.maxNumTokens}, temp=${params.temperature}, topK=${params.topK}, topP=${params.topP}")
         AppLogger.d(TAG, "filesDir: ${context.filesDir}")
 
         onProgress("Procurando modelo...", 0)
@@ -157,7 +183,7 @@ object LlmChatModelHelper {
         val engineConfig = EngineConfig(
             modelPath = actualPath,
             backend = backend,
-            maxNumTokens = 2048
+            maxNumTokens = currentParams.maxNumTokens
         )
         engine = Engine(engineConfig)
         AppLogger.d(TAG, "Engine instance created, calling initialize()...")
@@ -169,8 +195,14 @@ object LlmChatModelHelper {
         onProgress("Engine initialized, criando conversa...", 70)
 
         AppLogger.d(TAG, "Creating conversation...")
-        conversation = engine!!.createConversation()
-        AppLogger.d(TAG, "Conversation created: $conversation")
+        val samplerConfig = SamplerConfig(
+            topK = currentParams.topK,
+            topP = currentParams.topP.toDouble(),
+            temperature = currentParams.temperature.toDouble()
+        )
+        val convConfig = ConversationConfig(samplerConfig = samplerConfig)
+        conversation = engine!!.createConversation(convConfig)
+        AppLogger.d(TAG, "Conversation created: $conversation with sampler topK=${currentParams.topK}, topP=${currentParams.topP}, temp=${currentParams.temperature}")
         AppLogger.d(TAG, "[PROGRESS] Conversa pronta! (90%)")
         onProgress("Conversa pronta!", 90)
 
@@ -260,4 +292,15 @@ object LlmChatModelHelper {
             AppLogger.e(TAG, "release() error", e)
         }
     }
+
+    fun reload(params: LlmParams, onProgress: (String, Int) -> Unit = { _, _ -> }) {
+        AppLogger.d(TAG, ">>> reload() CALLED <<<")
+        val ctx = currentContext ?: throw IllegalStateException("No context set - call initialize first")
+        val path = currentModelPath
+        release()
+        currentParams = params
+        initialize(ctx, path, params, onProgress)
+    }
+
+    fun isInitialized(): Boolean = engine != null && conversation != null
 }
