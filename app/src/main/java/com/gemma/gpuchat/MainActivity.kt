@@ -10,6 +10,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,20 +27,27 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
@@ -48,6 +56,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -128,12 +137,26 @@ fun ChatScreen() {
     var settings by remember { mutableStateOf(LlmPreferences.Settings()) }
     var isReloading by remember { mutableStateOf(false) }
 
+    // Drawer state for ModalNavigationDrawer
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+
+    // Conversation / chat history state
+    var conversations by remember { mutableStateOf(listOf<Conversation>()) }
+    var currentConversationId by remember { mutableStateOf<String?>(null) }
+
     // Handler for UI thread updates from background callbacks
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
 
     // Load saved settings
     LaunchedEffect(Unit) {
         settings = LlmPreferences.getSettingsFlow(context).first()
+    }
+
+    // Load conversations from ChatHistoryManager
+    LaunchedEffect(Unit) {
+        ChatHistoryManager.getConversationsFlow(context).collect { convList ->
+            conversations = convList
+        }
     }
 
     // Initialize model
@@ -362,8 +385,119 @@ fun ChatScreen() {
         }
     }
 
-    Scaffold(
-        topBar = {
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            ModalDrawerSheet(modifier = Modifier.width(300.dp)) {
+                // Drawer header
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.primaryContainer)
+                        .padding(24.dp)
+                ) {
+                    Column {
+                        Text(
+                            text = "Conversas",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "${conversations.size} conversa(s)",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+
+                // New conversation button
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            scope.launch {
+                                val newId = ChatHistoryManager.createNewConversation(context, "Nova conversa")
+                                currentConversationId = newId
+                                messages = emptyList()
+                                drawerState.close()
+                            }
+                        }
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Add,
+                        contentDescription = "Nova conversa",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = "Nova conversa",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                HorizontalDivider()
+
+                // Conversation list
+                LazyColumn(modifier = Modifier.fillMaxWidth()) {
+                    items(conversations, key = { it.id }) { conv ->
+                        val isSelected = conv.id == currentConversationId
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    scope.launch {
+                                        currentConversationId = conv.id
+                                        messages = conv.messages
+                                        drawerState.close()
+                                    }
+                                }
+                                .background(
+                                    if (isSelected) MaterialTheme.colorScheme.secondaryContainer
+                                    else MaterialTheme.colorScheme.surface
+                                )
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = conv.title,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (isSelected) MaterialTheme.colorScheme.onSecondaryContainer
+                                    else MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "${conv.messages.size} msgs",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            IconButton(
+                                onClick = {
+                                    scope.launch {
+                                        ChatHistoryManager.deleteConversation(context, conv.id)
+                                    }
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Delete,
+                                    contentDescription = "Apagar",
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    }
+                }
+            }
+        }
+    ) {
+        Scaffold(
+            topBar = {
             TopAppBar(
                 title = {
                     Row(
@@ -400,6 +534,19 @@ fun ChatScreen() {
                                 color = MaterialTheme.colorScheme.primary
                             )
                         }
+                    }
+                },
+                navigationIcon = {
+                    IconButton(onClick = {
+                        scope.launch {
+                            if (drawerState.isClosed) drawerState.open() else drawerState.close()
+                        }
+                    }) {
+                        Icon(
+                            imageVector = Icons.Filled.Menu,
+                            contentDescription = "Menu",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 },
                 actions = {
@@ -615,6 +762,19 @@ fun ChatScreen() {
                                                 } else msg
                                             }
                                             AppLogger.i(TAG, "onDone: metrics attached to message idx=$lastBotIdx tp=$tp")
+                                            // Auto-save conversation after response
+                                            currentConversationId?.let { convId ->
+                                                scope.launch {
+                                                    val conv = Conversation(
+                                                        id = convId,
+                                                        title = messages.firstOrNull { it.isUser }?.text?.take(30) ?: "Nova conversa",
+                                                        messages = messages,
+                                                        createdAt = System.currentTimeMillis(),
+                                                        updatedAt = System.currentTimeMillis()
+                                                    )
+                                                    ChatHistoryManager.saveConversation(context, conv)
+                                                }
+                                            }
                                         }
                                     }
                                 },
@@ -633,6 +793,7 @@ fun ChatScreen() {
                 }
             }
         }
+    }
 
         // Settings Dialog
         if (showSettings) {
