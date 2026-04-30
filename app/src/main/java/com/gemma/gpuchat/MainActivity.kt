@@ -237,6 +237,7 @@ fun ChatScreen() {
         val botMsg = ChatMessage(text = "", isUser = false)
         messages = messages + botMsg
         val prefix = "AUTO$nextState"
+        val startTime = System.currentTimeMillis()
         LlmChatModelHelper.sendMessage(
             message = text,
             onToken = { token ->
@@ -249,6 +250,19 @@ fun ChatScreen() {
             },
             onDone = {
                 AppLogger.i(TAG, "[$prefix-DONE] Response complete")
+                val lastBotIdx = messages.indexOfLast { !it.isUser }
+                if (lastBotIdx >= 0) {
+                    val tokenCount = messages[lastBotIdx].text.length
+                    val duration = System.currentTimeMillis() - startTime
+                    val tp = if (duration > 0) (tokenCount * 1000f) / duration else 0f
+                    throughput = tp
+                    AppLogger.i(TAG, "[$prefix-THROUGHPUT] tk/s=$tp count=$tokenCount dur=$duration")
+                    messages = messages.mapIndexed { idx, msg ->
+                        if (idx == lastBotIdx) {
+                            msg.copy(throughput = tp, tokenCount = tokenCount, durationMs = duration)
+                        } else msg
+                    }
+                }
                 autoMessageState = nextState
                 onDone()
             },
@@ -270,6 +284,7 @@ fun ChatScreen() {
             val botMsg = ChatMessage(text = "", isUser = false)
             messages = messages + botMsg
 
+            val startTime = System.currentTimeMillis()
             LlmChatModelHelper.sendMessage(
                 message = userMessage.text,
                 onToken = { token ->
@@ -282,6 +297,19 @@ fun ChatScreen() {
                 },
                 onDone = {
                     AppLogger.i(TAG, "[OLA-RESPONSE-DONE] Response complete")
+                    val lastBotIdx = messages.indexOfLast { !it.isUser }
+                    if (lastBotIdx >= 0) {
+                        val tokenCount = messages[lastBotIdx].text.length
+                        val duration = System.currentTimeMillis() - startTime
+                        val tp = if (duration > 0) (tokenCount * 1000f) / duration else 0f
+                        throughput = tp
+                        AppLogger.i(TAG, "[OLA-RESPONSE-THROUGHPUT] tk/s=$tp count=$tokenCount dur=$duration")
+                        messages = messages.mapIndexed { idx, msg ->
+                            if (idx == lastBotIdx) {
+                                msg.copy(throughput = tp, tokenCount = tokenCount, durationMs = duration)
+                            } else msg
+                        }
+                    }
                     // Now send "Qual a sua LLM"
                     sendAutoMessage("Qual a sua LLM", 2) {
                         // Now send "O que você sabe fazer"
@@ -553,6 +581,7 @@ fun ChatScreen() {
                                             val duration = System.currentTimeMillis() - startTime
                                             val tp = if (duration > 0) (tokenCount * 1000f) / duration else 0f
                                             AppLogger.i(TAG, "Throughput: tp=$tp count=$tokenCount duration=$duration")
+                                            throughput = tp
                                             messages = messages.mapIndexed { idx, msg ->
                                                 if (idx == lastBotIdx) {
                                                     msg.copy(throughput = tp, tokenCount = tokenCount, durationMs = duration)
