@@ -30,8 +30,12 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -337,20 +341,40 @@ fun ChatScreen() {
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                            HorizontalDivider(
+                                modifier = Modifier
+                                    .height(16.dp)
+                                    .width(1.dp),
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                            Text(
+                                text = "tk/s: ${String.format("%.1f", throughput)}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
                         }
-                        // Text(
-                        //     text = "Tokens/s: ${String.format("%.1f", throughput)}",
-                        //     style = MaterialTheme.typography.bodySmall,
-                        //     color = MaterialTheme.colorScheme.primary
-                        // )
                     }
                 },
                 actions = {
-                    Button(onClick = {
+                    IconButton(onClick = {
                         logContent = AppLogger.readLogFile()
                         showLogs = !showLogs
                     }) {
-                        Text(if (showLogs) "Hide Logs" else "Show Logs")
+                        if (showLogs) {
+                            Icon(
+                                imageVector = Icons.Filled.Refresh,
+                                contentDescription = "Hide Logs",
+                                modifier = Modifier.size(20.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Filled.Refresh,
+                                contentDescription = "Show Logs",
+                                modifier = Modifier.size(20.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             )
