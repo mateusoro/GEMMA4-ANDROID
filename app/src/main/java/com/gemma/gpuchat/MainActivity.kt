@@ -352,16 +352,6 @@ fun ChatScreen() {
                             } else msg
                         }
                     }
-                    // Now send "Qual a sua LLM"
-                    sendAutoMessage("Qual a sua LLM", 2) {
-                        // Now send "O que você sabe fazer"
-                        sendAutoMessage("O que você sabe fazer?", 3) {
-                            // Now send "Se apresente"
-                            sendAutoMessage("Se apresente", 4) {
-                                AppLogger.i(TAG, "All 4 auto messages complete")
-                            }
-                        }
-                    }
                 },
                 onError = { error ->
                     AppLogger.e(TAG, "[OLA-RESPONSE-ERROR] ${error.message}", error)
