@@ -5,6 +5,7 @@ import android.content.Context
 import android.os.Debug
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Contents
+import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
@@ -183,7 +184,9 @@ object LlmChatModelHelper {
         val engineConfig = EngineConfig(
             modelPath = actualPath,
             backend = backend,
-            maxNumTokens = currentParams.maxNumTokens
+            maxNumTokens = currentParams.maxNumTokens,
+            audioBackend = Backend.CPU(),
+            maxNumImages = 4
         )
         engine = Engine(engineConfig)
         AppLogger.d(TAG, "Engine instance created, calling initialize()...")
@@ -272,6 +275,55 @@ object LlmChatModelHelper {
             callback
         )
         AppLogger.d(TAG, "sendMessageAsync() returned (async)")
+    }
+
+    fun sendAudioMessage(
+        audioBytes: ByteArray,
+        onToken: (String) -> Unit,
+        onDone: () -> Unit,
+        onError: (Throwable) -> Unit
+    ) {
+        AppLogger.d(TAG, ">>> sendAudioMessage() CALLED <<<")
+        AppLogger.d(TAG, "audioBytes size: ${audioBytes.size}")
+
+        if (conversation == null) {
+            AppLogger.e(TAG, "conversation is NULL!")
+            onError(IllegalStateException("Conversation not initialized"))
+            return
+        }
+
+        val callback = object : MessageCallback {
+            private var done = false
+
+            override fun onMessage(message: Message) {
+                if (done) return
+                val text = message.toString()
+                AppLogger.d(TAG, "onMessage: '$text'")
+                try { onToken(text) } catch (e: Exception) { AppLogger.e(TAG, "onToken threw", e) }
+            }
+
+            override fun onDone() {
+                if (done) return
+                done = true
+                AppLogger.i(TAG, "onDone")
+                try { onDone() } catch (e: Exception) { AppLogger.e(TAG, "onDone threw", e) }
+            }
+
+            override fun onError(throwable: Throwable) {
+                AppLogger.e(TAG, "onError: ${throwable.message}", throwable)
+                try { onError(throwable) } catch (e: Exception) { AppLogger.e(TAG, "onError threw", e) }
+            }
+        }
+
+        AppLogger.d(TAG, "Sending audio via Contents.of(Content.AudioBytes(...))")
+        conversation?.sendMessageAsync(
+            Contents.of(
+                Content.AudioBytes(audioBytes),
+                Content.Text("Please transcribe the speech in this audio.")
+            ),
+            callback
+        )
+        AppLogger.d(TAG, "sendMessageAsync(audio) returned (async)")
     }
 
     fun release() {

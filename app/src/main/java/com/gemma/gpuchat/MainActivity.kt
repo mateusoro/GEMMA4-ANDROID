@@ -4,6 +4,8 @@ package com.gemma.gpuchat
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.media.AudioFormat
+import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.os.Build
 import android.os.Bundle
@@ -87,6 +89,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -155,62 +158,91 @@ fun ChatScreen() {
     var conversations by remember { mutableStateOf(listOf<Conversation>()) }
     var currentConversationId by remember { mutableStateOf<String?>(null) }
 
-    // Audio recording state
+    // Audio recording state (raw PCM 16kHz mono 16-bit for Gemma 4)
+    val AUDIO_SAMPLE_RATE = 16000
+    val AUDIO_CHANNEL = AudioFormat.CHANNEL_IN_MONO
+    val AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT
+    var audioRecord: AudioRecord? by remember { mutableStateOf(null) }
+    var recordingJob: kotlinx.coroutines.Job? by remember { mutableStateOf(null) }
     var isRecording by remember { mutableStateOf(false) }
-    var mediaRecorder: MediaRecorder? by remember { mutableStateOf(null) }
-    var recordingFilePath by remember { mutableStateOf<String?>(null) }
+    val audioBuffer = mutableListOf<Byte>()
 
     fun startRecordingAudio() {
         try {
-            val outputDir = context.cacheDir
-            val file = java.io.File(outputDir, "voice_${System.currentTimeMillis()}.m4a")
-            recordingFilePath = file.absolutePath
-            mediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                MediaRecorder(context)
-            } else {
-                @Suppress("DEPRECATION")
-                MediaRecorder()
-            }.apply {
-                setAudioSource(MediaRecorder.AudioSource.MIC)
-                setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-                setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                setAudioSamplingRate(44100)
-                setAudioEncodingBitRate(128000)
-                setOutputFile(file.absolutePath)
-                prepare()
-                start()
+            val bufferSize = AudioRecord.getMinBufferSize(AUDIO_SAMPLE_RATE, AUDIO_CHANNEL, AUDIO_FORMAT)
+            if (bufferSize == AudioRecord.ERROR || bufferSize == AudioRecord.ERROR_BAD_VALUE) {
+                AppLogger.e(TAG, "Invalid buffer size: $bufferSize")
+                return
             }
+            audioRecord = AudioRecord(
+                MediaRecorder.AudioSource.MIC,
+                AUDIO_SAMPLE_RATE,
+                AUDIO_CHANNEL,
+                AUDIO_FORMAT,
+                bufferSize
+            )
+            if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
+                AppLogger.e(TAG, "AudioRecord not initialized")
+                audioRecord?.release()
+                audioRecord = null
+                return
+            }
+            audioBuffer.clear()
+            audioRecord?.startRecording()
             isRecording = true
+            AppLogger.i(TAG, "AudioRecord started at 16kHz mono PCM 16-bit")
+
+            recordingJob = scope.launch {
+                val buffer = ByteArray(bufferSize)
+                val startTime = System.currentTimeMillis()
+                val maxDuration = 28000L // 28s to stay under 30s limit
+                while (isRecording && System.currentTimeMillis() - startTime < maxDuration) {
+                    val read = audioRecord?.read(buffer, 0, buffer.size) ?: 0
+                    if (read > 0) {
+                        for (i in 0 until read) {
+                            audioBuffer.add(buffer[i])
+                        }
+                    }
+                    delay(50)
+                }
+                // Auto-stop at max duration
+                if (isRecording) {
+                    recordingJob?.cancel()
+                    recordingJob = null
+                    audioRecord?.stop()
+                    audioRecord?.release()
+                    audioRecord = null
+                    isRecording = false
+                    audioBuffer.clear()
+                }
+            }
         } catch (e: Exception) {
-            AppLogger.e(TAG, "Failed to start recording", e)
+            AppLogger.e(TAG, "Failed to start AudioRecord", e)
             isRecording = false
         }
     }
 
-    fun stopRecordingAudio(): String? {
+    fun stopRecordingAudio(): ByteArray? {
         return try {
-            mediaRecorder?.stop()
-            mediaRecorder?.release()
-            mediaRecorder = null
+            recordingJob?.cancel()
+            recordingJob = null
+            audioRecord?.stop()
+            audioRecord?.release()
+            audioRecord = null
             isRecording = false
-            val path = recordingFilePath
-            recordingFilePath = null
-            path
+
+            val bytes = audioBuffer.toByteArray()
+            AppLogger.i(TAG, "Audio recorded: ${bytes.size} bytes (${bytes.size / 2} samples @ 16kHz = ${bytes.size / 2 / 16000.0}s)")
+            audioBuffer.clear()
+            if (bytes.isEmpty()) null else bytes
         } catch (e: Exception) {
-            AppLogger.e(TAG, "Failed to stop recording", e)
-            mediaRecorder?.release()
-            mediaRecorder = null
+            AppLogger.e(TAG, "Failed to stop AudioRecord", e)
+            audioRecord?.release()
+            audioRecord = null
             isRecording = false
-            recordingFilePath = null
+            audioBuffer.clear()
             null
         }
-    }
-
-    fun cancelRecordingAudio() {
-        try { mediaRecorder?.stop(); mediaRecorder?.release() } catch (e: Exception) { /* ignore */ }
-        mediaRecorder = null
-        recordingFilePath = null
-        isRecording = false
     }
 
     // Permission launcher - defined AFTER the functions it calls
@@ -762,9 +794,72 @@ fun ChatScreen() {
                     IconButton(
                         onClick = {
                             if (isRecording) {
-                                val audioPath = stopRecordingAudio()
-                                if (audioPath != null) {
-                                    AppLogger.i(TAG, "Voice message recorded: $audioPath")
+                                val audioBytes = stopRecordingAudio()
+                                if (audioBytes != null && audioBytes.isNotEmpty()) {
+                                    AppLogger.i(TAG, "Sending audio to Gemma: ${audioBytes.size} bytes")
+                                    val userMsg = ChatMessage(text = "[🎤 Audio ${audioBytes.size / 2 / 16000.0}s]", isUser = true)
+                                    messages = messages + userMsg
+                                    val botMsg = ChatMessage(text = "", isUser = false)
+                                    messages = messages + botMsg
+                                    val startTime = System.currentTimeMillis()
+                                    val currentMessages = messages.toMutableList()
+                                    val lastBotIdx = currentMessages.indexOfLast { !it.isUser }
+
+                                    LlmChatModelHelper.sendAudioMessage(
+                                        audioBytes = audioBytes,
+                                        onToken = { token ->
+                                            AppLogger.d(TAG, "[AUDIO-TOKEN] $token")
+                                            mainHandler.post {
+                                                val lastIdx = currentMessages.indexOfLast { !it.isUser }
+                                                if (lastIdx >= 0) {
+                                                    currentMessages[lastIdx] = currentMessages[lastIdx].copy(
+                                                        text = currentMessages[lastIdx].text + token
+                                                    )
+                                                    messages = currentMessages.toList()
+                                                }
+                                            }
+                                        },
+                                        onDone = {
+                                            AppLogger.i(TAG, "[AUDIO-DONE] Response complete")
+                                            val lastBotIdxFinal = currentMessages.indexOfLast { !it.isUser }
+                                            var tp = 0f
+                                            if (lastBotIdxFinal >= 0) {
+                                                val tokenCount = currentMessages[lastBotIdxFinal].text.length
+                                                val duration = System.currentTimeMillis() - startTime
+                                                tp = if (duration > 0) (tokenCount * 1000f) / duration else 0f
+                                                throughput = tp
+                                                currentMessages[lastBotIdxFinal] = currentMessages[lastBotIdxFinal].copy(
+                                                    throughput = tp, tokenCount = tokenCount, durationMs = duration
+                                                )
+                                                messages = currentMessages.toList()
+                                                AppLogger.i(TAG, "onDone: metrics attached to message idx=$lastBotIdxFinal tp=$tp")
+                                            }
+                                            currentConversationId?.let { convId ->
+                                                scope.launch {
+                                                    val conv = Conversation(
+                                                        id = convId,
+                                                        title = currentMessages.firstOrNull { it.isUser }?.text?.take(30) ?: "Nova conversa",
+                                                        messages = currentMessages.toList(),
+                                                        createdAt = System.currentTimeMillis(),
+                                                        updatedAt = System.currentTimeMillis()
+                                                    )
+                                                    ChatHistoryManager.saveConversation(context, conv)
+                                                }
+                                            }
+                                        },
+                                        onError = { error ->
+                                            AppLogger.e(TAG, "Audio error: ${error.message}", error)
+                                            mainHandler.post {
+                                                val lastIdx = currentMessages.indexOfLast { !it.isUser }
+                                                if (lastIdx >= 0) {
+                                                    currentMessages[lastIdx] = currentMessages[lastIdx].copy(
+                                                        text = "Erro ao processar audio: ${error.message}"
+                                                    )
+                                                    messages = currentMessages.toList()
+                                                }
+                                            }
+                                        }
+                                    )
                                 }
                             } else {
                                 if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
