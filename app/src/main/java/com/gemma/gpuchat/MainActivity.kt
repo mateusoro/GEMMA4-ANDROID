@@ -885,6 +885,8 @@ fun ChatScreen() {
                                                                     if (idx == lastBot) msg.copy(throughput = tp, tokenCount = text.length, durationMs = duration) else msg
                                                                 }
                                                             }
+                                                            // Reset conversation so next audio uses fresh context
+                                                            LlmChatModelHelper.resetConversation()
                                                             currentConversationId?.let { convId ->
                                                                 scope.launch {
                                                                     val conv = Conversation(

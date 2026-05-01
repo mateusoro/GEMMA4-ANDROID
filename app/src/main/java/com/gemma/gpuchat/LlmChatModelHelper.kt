@@ -212,6 +212,23 @@ object LlmChatModelHelper {
         AppLogger.i(TAG, ">>> INITIALIZATION COMPLETE (backend=$backend) <<<")
     }
 
+    private fun createNewConversation(): Conversation? {
+        if (engine == null) return null
+        val samplerConfig = SamplerConfig(
+            topK = currentParams.topK,
+            topP = currentParams.topP.toDouble(),
+            temperature = currentParams.temperature.toDouble()
+        )
+        val convConfig = ConversationConfig(samplerConfig = samplerConfig)
+        return engine!!.createConversation(convConfig)
+    }
+
+    fun resetConversation() {
+        conversation?.close()
+        conversation = createNewConversation()
+        AppLogger.i(TAG, "Conversation reset to fresh state")
+    }
+
     fun sendMessage(
         message: String,
         onToken: (String) -> Unit,
