@@ -131,6 +131,7 @@ fun ChatScreen() {
     var messages by remember { mutableStateOf(listOf<ChatMessage>()) }
     var inputText by remember { mutableStateOf("") }
     var isModelReady by remember { mutableStateOf(false) }
+    var audioTranscriber by remember { mutableStateOf<AudioTranscriber?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showLogs by remember { mutableStateOf(false) }
     var logContent by remember { mutableStateOf("") }
@@ -392,6 +393,15 @@ fun ChatScreen() {
 
             isModelReady = true
             isInitializing = false
+            // Initialize AudioTranscriber with its own engine/conversation (isolated from chat)
+            withContext(Dispatchers.IO) {
+                audioTranscriber = AudioTranscriber(context)
+                audioTranscriber!!.initialize { stage, progress ->
+                    mainHandler.post {
+                        initStage = "$stage (${progress}%)"
+                    }
+                }
+            }
             memoryInfo = LlmChatModelHelper.getMemoryUsage()
             systemMemoryInfo = LlmChatModelHelper.getSystemMemory(context)
             initStage = "Pronto!"
@@ -831,36 +841,40 @@ fun ChatScreen() {
                             if (isRecording) {
                                 val audioBytes = stopRecordingAudio()
                                 if (audioBytes != null && audioBytes.isNotEmpty()) {
-                                    AppLogger.i(TAG, "Sending audio to Gemma: ${audioBytes.size} bytes")
-                                    val userMsg = ChatMessage(text = "[🎤 Audio ${audioBytes.size / 2 / 16000.0}s]", isUser = true)
-                                    messages = messages + userMsg
-                                    val botMsg = ChatMessage(text = "", isUser = false)
-                                    messages = messages + botMsg
-                                    val currentMessages = messages.toMutableList()
-                                    var transcriptionText = ""
+                                    AppLogger.i(TAG, "Recording stopped, ${audioBytes.size} bytes -> sending to AudioTranscriber")
+                                    // Remove placeholder message
+                                    messages = messages.filter { !it.text.startsWith("[🎤 Audio") }
+                                    val placeholderBot = ChatMessage(text = "", isUser = false)
+                                    messages = messages + placeholderBot
 
-                                    LlmChatModelHelper.sendAudioMessage(
+                                    audioTranscriber?.transcribe(
                                         audioBytes = audioBytes,
                                         onToken = { token ->
                                             AppLogger.d(TAG, "[AUDIO-TRANSCRIBE] $token")
-                                            transcriptionText += token
+                                            mainHandler.post {
+                                                val lastBot = messages.indexOfLast { !it.isUser }
+                                                if (lastBot >= 0) {
+                                                    messages = messages.mapIndexed { idx, msg ->
+                                                        if (idx == lastBot) msg.copy(text = msg.text + token) else msg
+                                                    }
+                                                }
+                                            }
                                         },
                                         onDone = {
-                                            AppLogger.i(TAG, "[AUDIO-TRANSCRIBE-DONE] Transcription complete: '$transcriptionText'")
+                                            AppLogger.i(TAG, "[AUDIO-TRANSCRIBE-DONE]")
                                             mainHandler.post {
-                                                // Remove the "[🎤 Audio Xs]" placeholder
+                                                val transcription = messages.indexOfLast { !it.isUser }.takeIf { it >= 0 }?.let { messages[it].text } ?: ""
+                                                AppLogger.i(TAG, "Transcription: '$transcription'")
+                                                // Remove placeholder
                                                 messages = messages.filter { !it.text.startsWith("[🎤 Audio") }
-                                                // Reset conversation FIRST - start fresh so model doesn't echo prior messages
-                                                LlmChatModelHelper.resetConversation()
-                                                // Add transcription as user message
-                                                val transcribedMsg = ChatMessage(text = transcriptionText, isUser = true)
-                                                messages = messages + transcribedMsg
-                                                // Add empty bot message for model response
+                                                // Add user message with transcription
+                                                messages = messages + ChatMessage(text = transcription, isUser = true)
+                                                // Add bot response placeholder
                                                 messages = messages + ChatMessage(text = "", isUser = false)
                                                 val textStartTime = System.currentTimeMillis()
-                                                AppLogger.i(TAG, "Audio transcription added as user msg: '$transcriptionText', sending to model...")
+                                                AppLogger.i(TAG, "Transcription added as user msg, sending to chat model...")
                                                 LlmChatModelHelper.sendMessage(
-                                                    message = transcriptionText,
+                                                    message = transcription,
                                                     onToken = { token ->
                                                         AppLogger.d(TAG, "[AUDIO-RESP-TOKEN] $token")
                                                         mainHandler.post {
@@ -916,13 +930,13 @@ fun ChatScreen() {
                                             }
                                         },
                                         onError = { error ->
-                                            AppLogger.e(TAG, "Audio transcription error: ${error.message}", error)
+                                            AppLogger.e(TAG, "AudioTranscriber error: ${error.message}", error)
                                             mainHandler.post {
                                                 messages = messages.filter { !it.text.startsWith("[🎤 Audio") }
-                                                val lastBotIdx = messages.indexOfLast { !it.isUser }
-                                                if (lastBotIdx >= 0) {
+                                                val lastBot = messages.indexOfLast { !it.isUser }
+                                                if (lastBot >= 0) {
                                                     messages = messages.mapIndexed { idx, msg ->
-                                                        if (idx == lastBotIdx) msg.copy(text = "Erro audio: ${error.message}") else msg
+                                                        if (idx == lastBot) msg.copy(text = "Erro audio: ${error.message}") else msg
                                                     }
                                                 }
                                             }
@@ -939,7 +953,7 @@ fun ChatScreen() {
                                 }
                             }
                         },
-                        enabled = isModelReady
+                        enabled = isModelReady && audioTranscriber?.isReady() == true
                     ) {
                         Icon(
                             imageVector = if (isRecording) Icons.Filled.Refresh else Icons.Filled.Add,
