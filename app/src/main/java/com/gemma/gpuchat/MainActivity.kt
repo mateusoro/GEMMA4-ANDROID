@@ -39,9 +39,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.List
-
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
@@ -763,18 +765,12 @@ fun ChatScreen() {
                                 val audioPath = stopRecordingAudio()
                                 if (audioPath != null) {
                                     AppLogger.i(TAG, "Voice message recorded: $audioPath")
-                                    scope.launch {
-                                        snackbarHostState.showSnackbar("Voice message: $audioPath")
-                                    }
                                 }
                             } else {
                                 if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
                                     == PackageManager.PERMISSION_GRANTED
                                 ) {
                                     startRecordingAudio()
-                                    scope.launch {
-                                        snackbarHostState.showSnackbar("Gravando... solte para enviar")
-                                    }
                                 } else {
                                     recordAudioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                                 }
