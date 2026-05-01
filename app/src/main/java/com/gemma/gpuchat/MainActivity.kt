@@ -865,14 +865,14 @@ fun ChatScreen() {
                                             mainHandler.post {
                                                 val transcription = messages.indexOfLast { !it.isUser }.takeIf { it >= 0 }?.let { messages[it].text } ?: ""
                                                 AppLogger.i(TAG, "Transcription: '$transcription'")
-                                                // Remove placeholder
-                                                messages = messages.filter { !it.text.startsWith("[🎤 Audio") }
+                                                // Remove placeholder messages (both the 🎤 text and the transcription-accumulated bot msg)
+                                                messages = messages.filter { !it.text.startsWith("[🎤 Audio") && it.text != transcription }
                                                 // Add user message with transcription
                                                 messages = messages + ChatMessage(text = transcription, isUser = true)
                                                 // Add bot response placeholder
                                                 messages = messages + ChatMessage(text = "", isUser = false)
                                                 val textStartTime = System.currentTimeMillis()
-                                                AppLogger.i(TAG, "Transcription added as user msg, sending to chat model...")
+                                                AppLogger.i(TAG, "Transcription added as user msg: '$transcription', sending to chat model...")
                                                 LlmChatModelHelper.sendMessage(
                                                     message = transcription,
                                                     onToken = { token ->
