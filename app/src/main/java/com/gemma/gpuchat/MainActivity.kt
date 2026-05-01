@@ -2,6 +2,10 @@
 
 package com.gemma.gpuchat
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.media.MediaRecorder
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -9,6 +13,9 @@ import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -34,6 +41,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.List
+
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
@@ -144,6 +152,73 @@ fun ChatScreen() {
     // Conversation / chat history state
     var conversations by remember { mutableStateOf(listOf<Conversation>()) }
     var currentConversationId by remember { mutableStateOf<String?>(null) }
+
+    // Audio recording state
+    var isRecording by remember { mutableStateOf(false) }
+    var mediaRecorder: MediaRecorder? by remember { mutableStateOf(null) }
+    var recordingFilePath by remember { mutableStateOf<String?>(null) }
+
+    fun startRecordingAudio() {
+        try {
+            val outputDir = context.cacheDir
+            val file = java.io.File(outputDir, "voice_${System.currentTimeMillis()}.m4a")
+            recordingFilePath = file.absolutePath
+            mediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                MediaRecorder(context)
+            } else {
+                @Suppress("DEPRECATION")
+                MediaRecorder()
+            }.apply {
+                setAudioSource(MediaRecorder.AudioSource.MIC)
+                setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+                setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+                setAudioSamplingRate(44100)
+                setAudioEncodingBitRate(128000)
+                setOutputFile(file.absolutePath)
+                prepare()
+                start()
+            }
+            isRecording = true
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "Failed to start recording", e)
+            isRecording = false
+        }
+    }
+
+    fun stopRecordingAudio(): String? {
+        return try {
+            mediaRecorder?.stop()
+            mediaRecorder?.release()
+            mediaRecorder = null
+            isRecording = false
+            val path = recordingFilePath
+            recordingFilePath = null
+            path
+        } catch (e: Exception) {
+            AppLogger.e(TAG, "Failed to stop recording", e)
+            mediaRecorder?.release()
+            mediaRecorder = null
+            isRecording = false
+            recordingFilePath = null
+            null
+        }
+    }
+
+    fun cancelRecordingAudio() {
+        try { mediaRecorder?.stop(); mediaRecorder?.release() } catch (e: Exception) { /* ignore */ }
+        mediaRecorder = null
+        recordingFilePath = null
+        isRecording = false
+    }
+
+    // Permission launcher - defined AFTER the functions it calls
+    val recordAudioPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            startRecordingAudio()
+        }
+    }
 
     // Handler for UI thread updates from background callbacks
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
@@ -682,6 +757,38 @@ fun ChatScreen() {
                         singleLine = true,
                         shape = RoundedCornerShape(24.dp)
                     )
+                    IconButton(
+                        onClick = {
+                            if (isRecording) {
+                                val audioPath = stopRecordingAudio()
+                                if (audioPath != null) {
+                                    AppLogger.i(TAG, "Voice message recorded: $audioPath")
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar("Voice message: $audioPath")
+                                    }
+                                }
+                            } else {
+                                if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
+                                    == PackageManager.PERMISSION_GRANTED
+                                ) {
+                                    startRecordingAudio()
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar("Gravando... solte para enviar")
+                                    }
+                                } else {
+                                    recordAudioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                }
+                            }
+                        },
+                        enabled = isModelReady
+                    ) {
+                        Icon(
+                            imageVector = if (isRecording) Icons.Filled.Refresh else Icons.Filled.Add,
+                            contentDescription = if (isRecording) "Stop recording" else "Record voice",
+                            tint = if (isRecording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
                     Button(
                         onClick = {
                             AppLogger.i(TAG, "SEND BUTTON CLICKED isModelReady=$isModelReady inputBlank=${inputText.isBlank()}")
