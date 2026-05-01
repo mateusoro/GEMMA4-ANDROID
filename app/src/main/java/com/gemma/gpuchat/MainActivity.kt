@@ -837,27 +837,28 @@ fun ChatScreen() {
                                     val botMsg = ChatMessage(text = "", isUser = false)
                                     messages = messages + botMsg
                                     val currentMessages = messages.toMutableList()
+                                    var transcriptionText = ""
 
                                     LlmChatModelHelper.sendAudioMessage(
                                         audioBytes = audioBytes,
                                         onToken = { token ->
                                             AppLogger.d(TAG, "[AUDIO-TRANSCRIBE] $token")
+                                            transcriptionText += token
                                         },
                                         onDone = {
-                                            AppLogger.i(TAG, "[AUDIO-TRANSCRIBE-DONE] Transcription complete")
-                                            val transcription = currentMessages.map { it.text }.joinToString("")
+                                            AppLogger.i(TAG, "[AUDIO-TRANSCRIBE-DONE] Transcription complete: '$transcriptionText'")
                                             mainHandler.post {
                                                 // Remove the "[🎤 Audio Xs]" placeholder
                                                 messages = messages.filter { !it.text.startsWith("[🎤 Audio") }
                                                 // Add transcription as user message
-                                                val transcribedMsg = ChatMessage(text = transcription, isUser = true)
+                                                val transcribedMsg = ChatMessage(text = transcriptionText, isUser = true)
                                                 messages = messages + transcribedMsg
                                                 // Add empty bot message for model response
                                                 messages = messages + ChatMessage(text = "", isUser = false)
                                                 val textStartTime = System.currentTimeMillis()
-                                                AppLogger.i(TAG, "Audio transcription added as user msg: '$transcription', sending to model...")
+                                                AppLogger.i(TAG, "Audio transcription added as user msg: '$transcriptionText', sending to model...")
                                                 LlmChatModelHelper.sendMessage(
-                                                    message = transcription,
+                                                    message = transcriptionText,
                                                     onToken = { token ->
                                                         AppLogger.d(TAG, "[AUDIO-RESP-TOKEN] $token")
                                                         mainHandler.post {
