@@ -5,7 +5,7 @@ package com.gemma.gpuchat
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.widget.Toast
+
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -42,7 +42,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
+
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
@@ -92,7 +92,6 @@ class MainActivity : ComponentActivity() {
         } catch (e: Exception) {
             android.util.Log.e(TAG, "Logger init failed", e)
         }
-        Toast.makeText(this, "App started!", Toast.LENGTH_SHORT).show()
         enableEdgeToEdge()
         setContent {
             MaterialTheme {
@@ -252,15 +251,12 @@ fun ChatScreen() {
             initStage = "Pronto!"
             initProgress = 1f
             AppLogger.i(TAG, "Model initialized successfully!")
-            Toast.makeText(context, "Model ready!", Toast.LENGTH_SHORT).show()
-            snackbarHostState.showSnackbar("Modelo pronto!")
         } catch (e: Exception) {
             isInitializing = false
             AppLogger.e(TAG, "Model init failed", e)
             initStage = "Erro: ${e.message}"
             errorMessage = "Model init failed: ${e.message}"
             snackbarHostState.showSnackbar("Model init failed: ${e.message}")
-            Toast.makeText(context, "Model init failed: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -615,36 +611,6 @@ fun ChatScreen() {
                         text = "Carregando Gemma...",
                         style = MaterialTheme.typography.headlineSmall
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = initStage,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    LinearProgressIndicator(
-                        progress = { initProgress },
-                        modifier = Modifier.fillMaxWidth(0.8f),
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "${(initProgress * 100).toInt()}%",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    memoryInfo?.let { mem ->
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = "Modelo: ${mem.modelSizeMb} MB",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = "App: ${mem.appUsedMb} MB | Native: ${mem.nativeHeapMb} MB",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
                 }
             }
 
