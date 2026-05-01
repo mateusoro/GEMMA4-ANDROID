@@ -277,48 +277,59 @@ object LlmChatModelHelper {
         AppLogger.d(TAG, "sendMessageAsync() returned (async)")
     }
 
-    private fun wrapAudioInWav(audioBytes: ByteArray): ByteArray {
+private fun wrapAudioInWav(audioBytes: ByteArray): ByteArray {
         val sampleRate = 16000
         val numChannels = 1
         val bitsPerSample = 16
         val byteRate = sampleRate * numChannels * bitsPerSample / 8
         val blockAlign = numChannels * bitsPerSample / 8
         val dataSize = audioBytes.size
-        val fileSize = 36 + dataSize
+        val numSamples = dataSize / (bitsPerSample / 8)
+        val fileSize = 44 + dataSize
 
-        val wavHeader = ByteArray(44)
+        val wav = ByteArray(56 + dataSize)
         // RIFF header
-        wavHeader[0] = 'R'.code.toByte(); wavHeader[1] = 'I'.code.toByte(); wavHeader[2] = 'F'.code.toByte(); wavHeader[3] = 'F'.code.toByte()
+        wav[0] = 'R'.code.toByte(); wav[1] = 'I'.code.toByte(); wav[2] = 'F'.code.toByte(); wav[3] = 'F'.code.toByte()
         // File size - 8 (little endian)
-        wavHeader[4] = (fileSize and 0xFF).toByte(); wavHeader[5] = ((fileSize shr 8) and 0xFF).toByte()
-        wavHeader[6] = ((fileSize shr 16) and 0xFF).toByte(); wavHeader[7] = ((fileSize shr 24) and 0xFF).toByte()
+        wav[4] = (fileSize and 0xFF).toByte(); wav[5] = ((fileSize shr 8) and 0xFF).toByte()
+        wav[6] = ((fileSize shr 16) and 0xFF).toByte(); wav[7] = ((fileSize shr 24) and 0xFF).toByte()
         // WAVE
-        wavHeader[8] = 'W'.code.toByte(); wavHeader[9] = 'A'.code.toByte(); wavHeader[10] = 'V'.code.toByte(); wavHeader[11] = 'E'.code.toByte()
+        wav[8] = 'W'.code.toByte(); wav[9] = 'A'.code.toByte(); wav[10] = 'V'.code.toByte(); wav[11] = 'E'.code.toByte()
         // fmt chunk
-        wavHeader[12] = 'f'.code.toByte(); wavHeader[13] = 'm'.code.toByte(); wavHeader[14] = 't'.code.toByte(); wavHeader[15] = ' '.code.toByte()
+        wav[12] = 'f'.code.toByte(); wav[13] = 'm'.code.toByte(); wav[14] = 't'.code.toByte(); wav[15] = ' '.code.toByte()
         // fmt chunk size (16 for PCM)
-        wavHeader[16] = 16; wavHeader[17] = 0; wavHeader[18] = 0; wavHeader[19] = 0
+        wav[16] = 16; wav[17] = 0; wav[18] = 0; wav[19] = 0
         // Audio format (1 = PCM)
-        wavHeader[20] = 1; wavHeader[21] = 0
+        wav[20] = 1; wav[21] = 0
         // Number of channels
-        wavHeader[22] = numChannels.toByte(); wavHeader[23] = 0
+        wav[22] = numChannels.toByte(); wav[23] = 0
         // Sample rate (little endian)
-        wavHeader[24] = (sampleRate and 0xFF).toByte(); wavHeader[25] = ((sampleRate shr 8) and 0xFF).toByte()
-        wavHeader[26] = ((sampleRate shr 16) and 0xFF).toByte(); wavHeader[27] = ((sampleRate shr 24) and 0xFF).toByte()
+        wav[24] = (sampleRate and 0xFF).toByte(); wav[25] = ((sampleRate shr 8) and 0xFF).toByte()
+        wav[26] = ((sampleRate shr 16) and 0xFF).toByte(); wav[27] = ((sampleRate shr 24) and 0xFF).toByte()
         // Byte rate
-        wavHeader[28] = (byteRate and 0xFF).toByte(); wavHeader[29] = ((byteRate shr 8) and 0xFF).toByte()
-        wavHeader[30] = ((byteRate shr 16) and 0xFF).toByte(); wavHeader[31] = ((byteRate shr 24) and 0xFF).toByte()
+        wav[28] = (byteRate and 0xFF).toByte(); wav[29] = ((byteRate shr 8) and 0xFF).toByte()
+        wav[30] = ((byteRate shr 16) and 0xFF).toByte(); wav[31] = ((byteRate shr 24) and 0xFF).toByte()
         // Block align
-        wavHeader[32] = blockAlign.toByte(); wavHeader[33] = 0
+        wav[32] = blockAlign.toByte(); wav[33] = 0
         // Bits per sample
-        wavHeader[34] = bitsPerSample.toByte(); wavHeader[35] = 0
+        wav[34] = bitsPerSample.toByte(); wav[35] = 0
+        // fact chunk
+        wav[36] = 'f'.code.toByte(); wav[37] = 'a'.code.toByte(); wav[38] = 'c'.code.toByte(); wav[39] = 't'.code.toByte()
+        // fact chunk size = 4
+        wav[40] = 4; wav[41] = 0; wav[42] = 0; wav[43] = 0
+        // Number of samples (little endian)
+        wav[44] = (numSamples and 0xFF).toByte(); wav[45] = ((numSamples shr 8) and 0xFF).toByte()
+        wav[46] = ((numSamples shr 16) and 0xFF).toByte(); wav[47] = ((numSamples shr 24) and 0xFF).toByte()
         // data chunk
-        wavHeader[36] = 'd'.code.toByte(); wavHeader[37] = 'a'.code.toByte(); wavHeader[38] = 't'.code.toByte(); wavHeader[39] = 'a'.code.toByte()
+        wav[48] = 'd'.code.toByte(); wav[49] = 'a'.code.toByte(); wav[50] = 't'.code.toByte(); wav[51] = 'a'.code.toByte()
         // Data size (little endian)
-        wavHeader[40] = (dataSize and 0xFF).toByte(); wavHeader[41] = ((dataSize shr 8) and 0xFF).toByte()
-        wavHeader[42] = ((dataSize shr 16) and 0xFF).toByte(); wavHeader[43] = ((dataSize shr 24) and 0xFF).toByte()
-
-        return wavHeader + audioBytes
+        wav[52] = (dataSize and 0xFF).toByte(); wav[53] = ((dataSize shr 8) and 0xFF).toByte()
+        wav[54] = ((dataSize shr 16) and 0xFF).toByte(); wav[55] = ((dataSize shr 24) and 0xFF).toByte()
+        // raw PCM data
+        for (i in audioBytes.indices) {
+            wav[56 + i] = audioBytes[i]
+        }
+        return wav
     }
 
     fun sendAudioMessage(
@@ -336,7 +347,7 @@ object LlmChatModelHelper {
             return
         }
 
-AppLogger.d(TAG, "Sending audio raw PCM ${audioBytes.size} bytes (no WAV wrapper)")
+AppLogger.d(TAG, "Sending audio as WAV ${wrapAudioInWav(audioBytes).size} bytes (PCM ${audioBytes.size} bytes + 56-byte header with fact chunk)")
         val callback = object : MessageCallback {
             private var done = false
             override fun onMessage(message: Message) {
@@ -358,7 +369,7 @@ AppLogger.d(TAG, "Sending audio raw PCM ${audioBytes.size} bytes (no WAV wrapper
         }
         conversation?.sendMessageAsync(
             Contents.of(
-                Content.AudioBytes(audioBytes),
+                Content.AudioBytes(wrapAudioInWav(audioBytes)),
                 Content.Text("Transcribe the following speech segment in its original language. Only output the transcription.")
             ),
             callback

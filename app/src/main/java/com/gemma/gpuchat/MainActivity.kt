@@ -836,61 +836,91 @@ fun ChatScreen() {
                                     messages = messages + userMsg
                                     val botMsg = ChatMessage(text = "", isUser = false)
                                     messages = messages + botMsg
-                                    val startTime = System.currentTimeMillis()
                                     val currentMessages = messages.toMutableList()
-                                    val lastBotIdx = currentMessages.indexOfLast { !it.isUser }
 
                                     LlmChatModelHelper.sendAudioMessage(
                                         audioBytes = audioBytes,
                                         onToken = { token ->
-                                            AppLogger.d(TAG, "[AUDIO-TOKEN] $token")
-                                            mainHandler.post {
-                                                val lastIdx = currentMessages.indexOfLast { !it.isUser }
-                                                if (lastIdx >= 0) {
-                                                    currentMessages[lastIdx] = currentMessages[lastIdx].copy(
-                                                        text = currentMessages[lastIdx].text + token
-                                                    )
-                                                    messages = currentMessages.toList()
-                                                }
-                                            }
+                                            AppLogger.d(TAG, "[AUDIO-TRANSCRIBE] $token")
                                         },
                                         onDone = {
-                                            AppLogger.i(TAG, "[AUDIO-DONE] Response complete")
-                                            val lastBotIdxFinal = currentMessages.indexOfLast { !it.isUser }
-                                            var tp = 0f
-                                            if (lastBotIdxFinal >= 0) {
-                                                val tokenCount = currentMessages[lastBotIdxFinal].text.length
-                                                val duration = System.currentTimeMillis() - startTime
-                                                tp = if (duration > 0) (tokenCount * 1000f) / duration else 0f
-                                                throughput = tp
-                                                currentMessages[lastBotIdxFinal] = currentMessages[lastBotIdxFinal].copy(
-                                                    throughput = tp, tokenCount = tokenCount, durationMs = duration
+                                            AppLogger.i(TAG, "[AUDIO-TRANSCRIBE-DONE] Transcription complete")
+                                            val transcription = currentMessages.map { it.text }.joinToString("")
+                                            mainHandler.post {
+                                                // Remove the "[🎤 Audio Xs]" placeholder
+                                                messages = messages.filter { !it.text.startsWith("[🎤 Audio") }
+                                                // Add transcription as user message
+                                                val transcribedMsg = ChatMessage(text = transcription, isUser = true)
+                                                messages = messages + transcribedMsg
+                                                // Add empty bot message for model response
+                                                messages = messages + ChatMessage(text = "", isUser = false)
+                                                val textStartTime = System.currentTimeMillis()
+                                                AppLogger.i(TAG, "Audio transcription added as user msg: '$transcription', sending to model...")
+                                                LlmChatModelHelper.sendMessage(
+                                                    message = transcription,
+                                                    onToken = { token ->
+                                                        AppLogger.d(TAG, "[AUDIO-RESP-TOKEN] $token")
+                                                        mainHandler.post {
+                                                            val lastBot = messages.indexOfLast { !it.isUser }
+                                                            if (lastBot >= 0) {
+                                                                messages = messages.mapIndexed { idx, msg ->
+                                                                    if (idx == lastBot) msg.copy(text = msg.text + token) else msg
+                                                                }
+                                                            }
+                                                        }
+                                                    },
+                                                    onDone = {
+                                                        AppLogger.i(TAG, "[AUDIO-RESP-DONE]")
+                                                        mainHandler.post {
+                                                            memoryInfo = LlmChatModelHelper.getMemoryUsage()
+                                                            systemMemoryInfo = LlmChatModelHelper.getSystemMemory(context)
+                                                            val lastBot = messages.indexOfLast { !it.isUser }
+                                                            if (lastBot >= 0) {
+                                                                val text = messages[lastBot].text
+                                                                val duration = System.currentTimeMillis() - textStartTime
+                                                                val tp = if (duration > 0) text.length * 1000f / duration else 0f
+                                                                throughput = tp
+                                                                messages = messages.mapIndexed { idx, msg ->
+                                                                    if (idx == lastBot) msg.copy(throughput = tp, tokenCount = text.length, durationMs = duration) else msg
+                                                                }
+                                                            }
+                                                            currentConversationId?.let { convId ->
+                                                                scope.launch {
+                                                                    val conv = Conversation(
+                                                                        id = convId,
+                                                                        title = messages.firstOrNull { it.isUser }?.text?.take(30) ?: "Audio",
+                                                                        messages = messages.toList(),
+                                                                        createdAt = System.currentTimeMillis(),
+                                                                        updatedAt = System.currentTimeMillis()
+                                                                    )
+                                                                    ChatHistoryManager.saveConversation(context, conv)
+                                                                }
+                                                            }
+                                                        }
+                                                    },
+                                                    onError = { error ->
+                                                        AppLogger.e(TAG, "Audio model response error: ${error.message}", error)
+                                                        mainHandler.post {
+                                                            val lastBot = messages.indexOfLast { !it.isUser }
+                                                            if (lastBot >= 0) {
+                                                                messages = messages.mapIndexed { idx, msg ->
+                                                                    if (idx == lastBot) msg.copy(text = "Erro: ${error.message}") else msg
+                                                                }
+                                                            }
+                                                        }
+                                                    }
                                                 )
-                                                messages = currentMessages.toList()
-                                                AppLogger.i(TAG, "onDone: metrics attached to message idx=$lastBotIdxFinal tp=$tp")
-                                            }
-                                            currentConversationId?.let { convId ->
-                                                scope.launch {
-                                                    val conv = Conversation(
-                                                        id = convId,
-                                                        title = currentMessages.firstOrNull { it.isUser }?.text?.take(30) ?: "Nova conversa",
-                                                        messages = currentMessages.toList(),
-                                                        createdAt = System.currentTimeMillis(),
-                                                        updatedAt = System.currentTimeMillis()
-                                                    )
-                                                    ChatHistoryManager.saveConversation(context, conv)
-                                                }
                                             }
                                         },
                                         onError = { error ->
-                                            AppLogger.e(TAG, "Audio error: ${error.message}", error)
+                                            AppLogger.e(TAG, "Audio transcription error: ${error.message}", error)
                                             mainHandler.post {
-                                                val lastIdx = currentMessages.indexOfLast { !it.isUser }
-                                                if (lastIdx >= 0) {
-                                                    currentMessages[lastIdx] = currentMessages[lastIdx].copy(
-                                                        text = "Erro ao processar audio: ${error.message}"
-                                                    )
-                                                    messages = currentMessages.toList()
+                                                messages = messages.filter { !it.text.startsWith("[🎤 Audio") }
+                                                val lastBotIdx = messages.indexOfLast { !it.isUser }
+                                                if (lastBotIdx >= 0) {
+                                                    messages = messages.mapIndexed { idx, msg ->
+                                                        if (idx == lastBotIdx) msg.copy(text = "Erro audio: ${error.message}") else msg
+                                                    }
                                                 }
                                             }
                                         }
