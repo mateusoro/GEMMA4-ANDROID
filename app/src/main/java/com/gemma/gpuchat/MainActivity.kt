@@ -246,6 +246,41 @@ fun ChatScreen() {
     }
 
     // Permission launcher - defined AFTER the functions it calls
+    fun encodeWav(rawPcmBytes: ByteArray, sampleRate: Int, numChannels: Int, bitsPerSample: Int): ByteArray {
+        val byteRate = sampleRate * numChannels * bitsPerSample / 8
+        val blockAlign = numChannels * bitsPerSample / 8
+        val dataSize = rawPcmBytes.size
+        val fileSize = 36 + dataSize
+
+        val wav = ByteArray(44 + dataSize)
+        // RIFF header
+        wav[0] = 'R'.code.toByte(); wav[1] = 'I'.code.toByte(); wav[2] = 'F'.code.toByte(); wav[3] = 'F'.code.toByte()
+        wav[4] = (fileSize and 0xFF).toByte(); wav[5] = ((fileSize shr 8) and 0xFF).toByte()
+        wav[6] = ((fileSize shr 16) and 0xFF).toByte(); wav[7] = ((fileSize shr 24) and 0xFF).toByte()
+        wav[8] = 'W'.code.toByte(); wav[9] = 'A'.code.toByte(); wav[10] = 'V'.code.toByte(); wav[11] = 'E'.code.toByte()
+        // fmt chunk
+        wav[12] = 'f'.code.toByte(); wav[13] = 'm'.code.toByte(); wav[14] = 't'.code.toByte(); wav[15] = ' '.code.toByte()
+        wav[16] = 16; wav[17] = 0; wav[18] = 0; wav[19] = 0  // chunk size = 16
+        wav[20] = 1; wav[21] = 0  // audio format = 1 (PCM)
+        wav[22] = numChannels.toByte(); wav[23] = 0
+        wav[24] = (sampleRate and 0xFF).toByte(); wav[25] = ((sampleRate shr 8) and 0xFF).toByte()
+        wav[26] = ((sampleRate shr 16) and 0xFF).toByte(); wav[27] = ((sampleRate shr 24) and 0xFF).toByte()
+        wav[28] = (byteRate and 0xFF).toByte(); wav[29] = ((byteRate shr 8) and 0xFF).toByte()
+        wav[30] = ((byteRate shr 16) and 0xFF).toByte(); wav[31] = ((byteRate shr 24) and 0xFF).toByte()
+        wav[32] = blockAlign.toByte(); wav[33] = 0
+        wav[34] = bitsPerSample.toByte(); wav[35] = 0
+        // data chunk
+        wav[36] = 'd'.code.toByte(); wav[37] = 'a'.code.toByte(); wav[38] = 't'.code.toByte(); wav[39] = 'a'.code.toByte()
+        wav[40] = (dataSize and 0xFF).toByte(); wav[41] = ((dataSize shr 8) and 0xFF).toByte()
+        wav[42] = ((dataSize shr 16) and 0xFF).toByte(); wav[43] = ((dataSize shr 24) and 0xFF).toByte()
+        // raw PCM data
+        for (i in rawPcmBytes.indices) {
+            wav[44 + i] = rawPcmBytes[i]
+        }
+        return wav
+    }
+
+    // Permission launcher - defined AFTER the functions it calls
     val recordAudioPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
