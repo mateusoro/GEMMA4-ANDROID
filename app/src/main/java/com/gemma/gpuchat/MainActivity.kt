@@ -39,14 +39,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -953,10 +951,10 @@ fun ChatScreen() {
                                 }
                             }
                         },
-                        enabled = isModelReady && audioTranscriber?.isReady() == true
+                        enabled = isModelReady
                     ) {
                         Icon(
-                            imageVector = if (isRecording) Icons.Filled.Refresh else Icons.Filled.Add,
+                            imageVector = if (isRecording) Icons.Filled.Stop else Icons.Filled.Mic,
                             contentDescription = if (isRecording) "Stop recording" else "Record voice",
                             tint = if (isRecording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(24.dp)
