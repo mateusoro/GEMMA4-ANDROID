@@ -277,6 +277,50 @@ object LlmChatModelHelper {
         AppLogger.d(TAG, "sendMessageAsync() returned (async)")
     }
 
+    private fun wrapAudioInWav(audioBytes: ByteArray): ByteArray {
+        val sampleRate = 16000
+        val numChannels = 1
+        val bitsPerSample = 16
+        val byteRate = sampleRate * numChannels * bitsPerSample / 8
+        val blockAlign = numChannels * bitsPerSample / 8
+        val dataSize = audioBytes.size
+        val fileSize = 36 + dataSize
+
+        val wavHeader = ByteArray(44)
+        // RIFF header
+        wavHeader[0] = 'R'.code.toByte(); wavHeader[1] = 'I'.code.toByte(); wavHeader[2] = 'F'.code.toByte(); wavHeader[3] = 'F'.code.toByte()
+        // File size - 8 (little endian)
+        wavHeader[4] = (fileSize and 0xFF).toByte(); wavHeader[5] = ((fileSize shr 8) and 0xFF).toByte()
+        wavHeader[6] = ((fileSize shr 16) and 0xFF).toByte(); wavHeader[7] = ((fileSize shr 24) and 0xFF).toByte()
+        // WAVE
+        wavHeader[8] = 'W'.code.toByte(); wavHeader[9] = 'A'.code.toByte(); wavHeader[10] = 'V'.code.toByte(); wavHeader[11] = 'E'.code.toByte()
+        // fmt chunk
+        wavHeader[12] = 'f'.code.toByte(); wavHeader[13] = 'm'.code.toByte(); wavHeader[14] = 't'.code.toByte(); wavHeader[15] = ' '.code.toByte()
+        // fmt chunk size (16 for PCM)
+        wavHeader[16] = 16; wavHeader[17] = 0; wavHeader[18] = 0; wavHeader[19] = 0
+        // Audio format (1 = PCM)
+        wavHeader[20] = 1; wavHeader[21] = 0
+        // Number of channels
+        wavHeader[22] = numChannels.toByte(); wavHeader[23] = 0
+        // Sample rate (little endian)
+        wavHeader[24] = (sampleRate and 0xFF).toByte(); wavHeader[25] = ((sampleRate shr 8) and 0xFF).toByte()
+        wavHeader[26] = ((sampleRate shr 16) and 0xFF).toByte(); wavHeader[27] = ((sampleRate shr 24) and 0xFF).toByte()
+        // Byte rate
+        wavHeader[28] = (byteRate and 0xFF).toByte(); wavHeader[29] = ((byteRate shr 8) and 0xFF).toByte()
+        wavHeader[30] = ((byteRate shr 16) and 0xFF).toByte(); wavHeader[31] = ((byteRate shr 24) and 0xFF).toByte()
+        // Block align
+        wavHeader[32] = blockAlign.toByte(); wavHeader[33] = 0
+        // Bits per sample
+        wavHeader[34] = bitsPerSample.toByte(); wavHeader[35] = 0
+        // data chunk
+        wavHeader[36] = 'd'.code.toByte(); wavHeader[37] = 'a'.code.toByte(); wavHeader[38] = 't'.code.toByte(); wavHeader[39] = 'a'.code.toByte()
+        // Data size (little endian)
+        wavHeader[40] = (dataSize and 0xFF).toByte(); wavHeader[41] = ((dataSize shr 8) and 0xFF).toByte()
+        wavHeader[42] = ((dataSize shr 16) and 0xFF).toByte(); wavHeader[43] = ((dataSize shr 24) and 0xFF).toByte()
+
+        return wavHeader + audioBytes
+    }
+
     fun sendAudioMessage(
         audioBytes: ByteArray,
         onToken: (String) -> Unit,
@@ -292,34 +336,30 @@ object LlmChatModelHelper {
             return
         }
 
+AppLogger.d(TAG, "Sending audio raw PCM ${audioBytes.size} bytes (no WAV wrapper)")
         val callback = object : MessageCallback {
             private var done = false
-
             override fun onMessage(message: Message) {
                 if (done) return
                 val text = message.toString()
                 AppLogger.d(TAG, "onMessage: '$text'")
                 try { onToken(text) } catch (e: Exception) { AppLogger.e(TAG, "onToken threw", e) }
             }
-
             override fun onDone() {
                 if (done) return
                 done = true
                 AppLogger.i(TAG, "onDone")
                 try { onDone() } catch (e: Exception) { AppLogger.e(TAG, "onDone threw", e) }
             }
-
             override fun onError(throwable: Throwable) {
                 AppLogger.e(TAG, "onError: ${throwable.message}", throwable)
                 try { onError(throwable) } catch (e: Exception) { AppLogger.e(TAG, "onError threw", e) }
             }
         }
-
-        AppLogger.d(TAG, "Sending audio via Contents.of(Content.AudioBytes(...))")
         conversation?.sendMessageAsync(
             Contents.of(
                 Content.AudioBytes(audioBytes),
-                Content.Text("Please transcribe the speech in this audio.")
+                Content.Text("Transcribe the following speech segment in its original language. Only output the transcription.")
             ),
             callback
         )
