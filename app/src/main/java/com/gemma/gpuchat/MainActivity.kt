@@ -713,17 +713,6 @@ fun ChatScreen() {
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            HorizontalDivider(
-                                modifier = Modifier
-                                    .height(16.dp)
-                                    .width(1.dp),
-                                color = MaterialTheme.colorScheme.outline
-                            )
-                            Text(
-                                text = "tk/s: ${String.format("%.1f", throughput)}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.primary
-                            )
                         }
                     }
                 },
