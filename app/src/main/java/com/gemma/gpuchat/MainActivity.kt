@@ -850,6 +850,8 @@ fun ChatScreen() {
                                             mainHandler.post {
                                                 // Remove the "[🎤 Audio Xs]" placeholder
                                                 messages = messages.filter { !it.text.startsWith("[🎤 Audio") }
+                                                // Reset conversation FIRST - start fresh so model doesn't echo prior messages
+                                                LlmChatModelHelper.resetConversation()
                                                 // Add transcription as user message
                                                 val transcribedMsg = ChatMessage(text = transcriptionText, isUser = true)
                                                 messages = messages + transcribedMsg
@@ -885,8 +887,6 @@ fun ChatScreen() {
                                                                     if (idx == lastBot) msg.copy(throughput = tp, tokenCount = text.length, durationMs = duration) else msg
                                                                 }
                                                             }
-                                                            // Reset conversation so next audio uses fresh context
-                                                            LlmChatModelHelper.resetConversation()
                                                             currentConversationId?.let { convId ->
                                                                 scope.launch {
                                                                     val conv = Conversation(
