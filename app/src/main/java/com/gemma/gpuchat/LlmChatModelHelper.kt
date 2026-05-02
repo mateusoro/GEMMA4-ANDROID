@@ -8,6 +8,8 @@ import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.Engine
+import com.google.ai.edge.litertlm.ToolProvider
+import com.google.ai.edge.litertlm.tool
 import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.ExperimentalApi
 import com.google.ai.edge.litertlm.SamplerConfig
@@ -36,6 +38,7 @@ object LlmChatModelHelper {
     private var currentParams: LlmParams = LlmParams()
     private var currentModelPath: String = ""
     private var currentContext: Context? = null
+    private var currentTools: List<ToolProvider> = emptyList()
 
     fun getParams(): LlmParams = currentParams
 
@@ -89,14 +92,17 @@ object LlmChatModelHelper {
         context: Context,
         modelPath: String,
         params: LlmParams = LlmParams(),
+        tools: List<ToolProvider> = emptyList(),
         onProgress: (String, Int) -> Unit = { _, _ -> }
     ) {
         currentParams = params
         currentModelPath = modelPath
         currentContext = context
+        currentTools = tools
         AppLogger.d(TAG, ">>> initialize() CALLED <<<")
         AppLogger.d(TAG, "modelPath: $modelPath")
         AppLogger.d(TAG, "params: maxTokens=${params.maxNumTokens}, temp=${params.temperature}, topK=${params.topK}, topP=${params.topP}")
+        AppLogger.d(TAG, "tools: ${tools.size} ToolProviders")
         AppLogger.d(TAG, "filesDir: ${context.filesDir}")
 
         onProgress("Procurando modelo...", 0)
@@ -203,7 +209,7 @@ object LlmChatModelHelper {
             topP = currentParams.topP.toDouble(),
             temperature = currentParams.temperature.toDouble()
         )
-        val convConfig = ConversationConfig(samplerConfig = samplerConfig)
+        val convConfig = ConversationConfig(samplerConfig = samplerConfig, tools = currentTools)
         conversation = engine!!.createConversation(convConfig)
         AppLogger.d(TAG, "Conversation created: $conversation with sampler topK=${currentParams.topK}, topP=${currentParams.topP}, temp=${currentParams.temperature}")
         AppLogger.d(TAG, "[PROGRESS] Conversa pronta! (90%)")
@@ -219,7 +225,7 @@ object LlmChatModelHelper {
             topP = currentParams.topP.toDouble(),
             temperature = currentParams.temperature.toDouble()
         )
-        val convConfig = ConversationConfig(samplerConfig = samplerConfig)
+        val convConfig = ConversationConfig(samplerConfig = samplerConfig, tools = currentTools)
         return engine!!.createConversation(convConfig)
     }
 
@@ -417,9 +423,10 @@ AppLogger.d(TAG, "Sending audio as WAV ${wrapAudioInWav(audioBytes).size} bytes 
         AppLogger.d(TAG, ">>> reload() CALLED <<<")
         val ctx = currentContext ?: throw IllegalStateException("No context set - call initialize first")
         val path = currentModelPath
+        val tools = currentTools
         release()
         currentParams = params
-        initialize(ctx, path, params, onProgress)
+        initialize(ctx, path, params, tools, onProgress)
     }
 
     fun isInitialized(): Boolean = engine != null && conversation != null
