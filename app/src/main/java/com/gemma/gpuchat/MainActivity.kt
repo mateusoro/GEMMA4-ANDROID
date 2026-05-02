@@ -509,7 +509,7 @@ fun ChatScreen() {
             initProgress = 0.1f
 
             // Create AgentTools (once, outside IO thread)
-            val agentTools = listOf(tool(AgentTools.create()))
+            val agentTools = listOf(tool(AgentTools.create(context)))
             AppLogger.d(TAG, "AgentTools created: ${agentTools.size} ToolProviders")
 
             // Run initialization on IO thread with UI-safe callbacks

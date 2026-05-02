@@ -2,7 +2,6 @@ package com.gemma.gpuchat
 
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.provider.CalendarContract
 import android.util.Log
 import androidx.core.net.toUri
@@ -16,31 +15,38 @@ private const val TAG = "AgentTools"
 
 /**
  * ToolSet para o Gemma Chat Agent.
- * Cada método @Tool é chamado automaticamente pelo LiteRT-LM quando o modelo decide usar a tool.
+ * Context é capturado na criação (via create(context)) e guardado como campo de instância —
+ * NÃO é passado como parâmetro do método (LiteRT-LM não suporta Context como tipo tool).
  *
- * Para registar: tools = listOf(tool(AgentTools()))
+ * Para registar: tools = listOf(tool(AgentTools.create(context)))
  */
 class AgentTools private constructor() : ToolSet {
 
+    private var appContext: Context? = null
+
     companion object {
-        fun create(): AgentTools = AgentTools()
+        fun create(context: Context): AgentTools {
+            val tools = AgentTools()
+            tools.appContext = context.applicationContext
+            return tools
+        }
     }
 
     // ──────────────────────────────────────────────────────────────
-    // TOOLS: Location & Calendar
+    // TOOLS: Location & Calendar (sem parâmetro Context)
     // ──────────────────────────────────────────────────────────────
 
     /** Mostra uma localização no mapa. */
     @Tool(description = "Shows a location on the map")
     fun showLocationOnMap(
-        context: Context,
         @ToolParam(description = "The location to search for. May be the name of a place, a business, or an address.") location: String
     ): Map<String, String> {
         Log.d(TAG, "showLocationOnMap: $location")
+        val ctx = appContext ?: return mapOf("result" to "error", "message" to "Context not initialized")
         try {
             val encoded = URLEncoder.encode(location, StandardCharsets.UTF_8.toString())
             val intent = Intent(Intent.ACTION_VIEW).apply { data = "geo:0,0?q=$encoded".toUri() }
-            context.startActivity(intent)
+            ctx.startActivity(intent)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to show location", e)
             return mapOf("result" to "error", "message" to (e.message ?: "Unknown error"))
@@ -51,11 +57,11 @@ class AgentTools private constructor() : ToolSet {
     /** Cria um evento no calendário. */
     @Tool(description = "Creates a new calendar event")
     fun createCalendarEvent(
-        context: Context,
         @ToolParam(description = "The date and time of the event in the format YYYY-MM-DDTHH:MM:SS") datetime: String,
         @ToolParam(description = "The title of the event") title: String
     ): Map<String, String> {
         Log.d(TAG, "createCalendarEvent: $datetime - $title")
+        val ctx = appContext ?: return mapOf("result" to "error", "message" to "Context not initialized")
         var ms = System.currentTimeMillis()
         try {
             val localDateTime = java.time.LocalDateTime.parse(datetime)
@@ -71,7 +77,7 @@ class AgentTools private constructor() : ToolSet {
             putExtra(CalendarContract.EXTRA_EVENT_END_TIME, ms + 3600000)
         }
         try {
-            context.startActivity(intent)
+            ctx.startActivity(intent)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to create calendar event", e)
             return mapOf("result" to "error", "message" to (e.message ?: "Unknown error"))
@@ -80,43 +86,43 @@ class AgentTools private constructor() : ToolSet {
     }
 
     // ──────────────────────────────────────────────────────────────
-    // TOOLS: Workspace / File operations
+    // TOOLS: Workspace / File operations (sem parâmetro Context)
     // ──────────────────────────────────────────────────────────────
 
     /** Lista os arquivos no workspace (documents e markdown). */
     @Tool(description = "Lists all files in the workspace directory")
-    fun listWorkspace(context: Context): Map<String, String> {
+    fun listWorkspace(): Map<String, String> {
         Log.d(TAG, "listWorkspace called")
-        val result = WorkspaceManager.listWorkspace(context)
+        val ctx = appContext ?: return mapOf("result" to "error", "message" to "Context not initialized")
+        val result = WorkspaceManager.listWorkspace(ctx)
         return mapOf("result" to "success", "files" to result)
     }
 
     /** Lista apenas arquivos Markdown no workspace. */
     @Tool(description = "Lists markdown files in the workspace")
-    fun listMarkdown(context: Context): Map<String, String> {
+    fun listMarkdown(): Map<String, String> {
         Log.d(TAG, "listMarkdown called")
-        val result = WorkspaceManager.listMarkdown(context)
+        val ctx = appContext ?: return mapOf("result" to "error", "message" to "Context not initialized")
+        val result = WorkspaceManager.listMarkdown(ctx)
         return mapOf("result" to "success", "markdown_files" to result)
     }
 
-    /** Lê o conteúdo de um arquivo no workspace. Pode ser usado para ler arquivos .md, .txt, código, etc. */
+    /** Lê o conteúdo de um arquivo no workspace. */
     @Tool(description = "Reads the content of a file from the workspace. Use this to read documents, markdown files, or code files.")
     fun readWorkspaceFile(
-        context: Context,
         @ToolParam(description = "The name of the file to read (e.g., 'documento.md' or 'documento.pdf')") filename: String
     ): Map<String, String> {
         Log.d(TAG, "readWorkspaceFile: $filename")
+        val ctx = appContext ?: return mapOf("result" to "error", "message" to "Context not initialized")
         var content: String? = null
 
-        // Check markdown directory first
-        val mdDir = WorkspaceManager.getMarkdownDir(context)
+        val mdDir = WorkspaceManager.getMarkdownDir(ctx)
         val mdFile = java.io.File(mdDir, filename)
         if (mdFile.exists()) {
             content = mdFile.readText()
         }
-        // Check documents directory
         if (content == null) {
-            val docsDir = WorkspaceManager.getDocumentsDir(context)
+            val docsDir = WorkspaceManager.getDocumentsDir(ctx)
             val docFile = java.io.File(docsDir, filename)
             if (docFile.exists()) {
                 content = "[Binary file: ${filename}]"
@@ -133,12 +139,12 @@ class AgentTools private constructor() : ToolSet {
     /** Salva um arquivo Markdown no workspace. */
     @Tool(description = "Saves a markdown file to the workspace with the given filename and content.")
     fun saveMarkdownFile(
-        context: Context,
         @ToolParam(description = "The filename for the markdown file (e.g., 'nota.md')") filename: String,
         @ToolParam(description = "The markdown content to save") content: String
     ): Map<String, String> {
         Log.d(TAG, "saveMarkdownFile: $filename")
-        val path = WorkspaceManager.saveMarkdown(context, filename.removeSuffix(".md"), content)
+        val ctx = appContext ?: return mapOf("result" to "error", "message" to "Context not initialized")
+        val path = WorkspaceManager.saveMarkdown(ctx, filename.removeSuffix(".md"), content)
         return if (path != null) {
             mapOf("result" to "success", "filename" to filename, "path" to path)
         } else {
@@ -147,14 +153,15 @@ class AgentTools private constructor() : ToolSet {
     }
 
     // ──────────────────────────────────────────────────────────────
-    // TOOLS: Information
+    // TOOLS: Information (sem parâmetro Context)
     // ──────────────────────────────────────────────────────────────
 
     /** Retorna information about the current device and time. */
     @Tool(description = "Returns current device information including time, date, and available memory.")
-    fun getDeviceInfo(context: Context): Map<String, String> {
+    fun getDeviceInfo(): Map<String, String> {
+        val ctx = appContext ?: return mapOf("result" to "error", "message" to "Context not initialized")
         val memInfo = LlmChatModelHelper.getMemoryUsage()
-        val sysMem = LlmChatModelHelper.getSystemMemory(context)
+        val sysMem = LlmChatModelHelper.getSystemMemory(ctx)
         val now = java.time.LocalDateTime.now()
         val dateTime = now.format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
         val dayOfWeek = now.format(java.time.format.DateTimeFormatter.ofPattern("EEEE"))
