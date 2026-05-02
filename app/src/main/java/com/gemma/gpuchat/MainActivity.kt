@@ -104,22 +104,10 @@ private const val TAG = "GemmaApp"
 
 // System instruction for the agent — tells Gemma about its available tools
 // <|think|> at the very start enables Gemma's built-in thinking/reasoning mode
-private fun getAgentSystemInstruction(): Contents {
-    val prompt = """You can do function call.
-You have access to these functions:
-- listWorkspace() -> lists all files in the workspace (documents and markdown)
-- listMarkdown() -> lists only .md files in the workspace
-- readWorkspaceFile(filename) -> reads a file content. Pass just the filename like "documento.md", the function searches in both markdown/ and documents/ folders automatically
-- saveMarkdownFile(filename, content) -> saves a .md file
-- showLocationOnMap(location) -> opens the map with the specified location
-- createCalendarEvent(datetime, title) -> creates a calendar event. datetime format: "2026-05-15T14:00:00"
-- getDeviceInfo() -> returns current date, time and memory info
-
-When a user asks you to read, list or manage files, always call listWorkspace() first to see what files exist, then use readWorkspaceFile() to read content.
-
-Current date: ${java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))}
-    """.trimIndent()
-
+// Builds the system instruction Contents — injects dynamic date into the user's custom prompt
+private fun buildSystemInstruction(customPrompt: String): Contents {
+    val now = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
+    val prompt = customPrompt.replace("{CURRENT_DATE}", now)
     return Contents.of(prompt)
 }
 
@@ -548,7 +536,7 @@ fun ChatScreen() {
 
             // Create AgentTools (once, outside IO thread)
             val agentTools = listOf(tool(AgentTools.create(context)))
-            val sysInstruction = getAgentSystemInstruction()
+            val sysInstruction = buildSystemInstruction(settings.systemPrompt)
             val thinkingChannel = getThinkingChannel()
             AppLogger.d(TAG, "AgentTools created: ${agentTools.size} ToolProviders, thinking enabled")
 
@@ -1542,6 +1530,7 @@ fun SettingsDialog(
     var temperature by remember { mutableStateOf(settings.temperature) }
     var topK by remember { mutableStateOf(settings.topK.toFloat()) }
     var topP by remember { mutableStateOf(settings.topP) }
+    var systemPrompt by remember { mutableStateOf(settings.systemPrompt) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1588,6 +1577,17 @@ fun SettingsDialog(
                     valueRange = 0.5f..1.0f,
                     modifier = Modifier.fillMaxWidth()
                 )
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // System Prompt
+                Text("System Prompt", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                OutlinedTextField(
+                    value = systemPrompt,
+                    onValueChange = { systemPrompt = it },
+                    modifier = Modifier.fillMaxWidth().height(200.dp),
+                    placeholder = { Text("Enter custom system instruction...", style = MaterialTheme.typography.bodySmall) },
+                    maxLines = 8
+                )
             }
         },
         confirmButton = {
@@ -1597,7 +1597,8 @@ fun SettingsDialog(
                         maxTokens = maxTokens.toInt(),
                         temperature = temperature,
                         topK = topK.toInt(),
-                        topP = topP
+                        topP = topP,
+                        systemPrompt = systemPrompt
                     )
                     onSettingsChange(newSettings)
                     onReload()
