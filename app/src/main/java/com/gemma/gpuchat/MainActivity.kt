@@ -87,6 +87,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import com.gemma.gpuchat.WorkspaceManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -292,6 +293,11 @@ fun ChatScreen() {
     // Handler for UI thread updates from background callbacks - must be before pdfPickerLauncher
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
 
+    // Initialize WorkspaceManager
+    LaunchedEffect(Unit) {
+        WorkspaceManager.init(context)
+    }
+
     val pdfPickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -334,6 +340,15 @@ fun ChatScreen() {
                     }
                     // Remove loading message
                     messages = messages.filter { !it.text.startsWith("📄 Processando") }
+                    // Salvar PDF e Markdown no workspace
+                    val pdfPath = WorkspaceManager.savePdf(context, uri)
+                    val mdFileName = uri.lastPathSegment?.substringAfterLast('/')?.replace(".pdf", "") ?: "document"
+                    val mdPath = WorkspaceManager.saveMarkdown(context, mdFileName, markdown)
+                    val workspaceInfo = buildString {
+                        appendLine("📁 Workspace atualizado:")
+                        if (pdfPath != null) appendLine("   ✓ PDF salvo: workspace/documents/${File(pdfPath).name}")
+                        if (mdPath != null) appendLine("   ✓ Markdown salvo: workspace/markdown/${File(mdPath).name}")
+                    }
                     // Add PDF content as user message
                     val pdfMsg = ChatMessage(text = markdown, isUser = true)
                     messages = messages + pdfMsg
@@ -341,7 +356,7 @@ fun ChatScreen() {
                     messages = messages + ChatMessage(text = "", isUser = false)
                     val startTime = System.currentTimeMillis()
                     AppLogger.i(TAG, "PDF converted to Markdown (${markdown.length} chars), sending to model")
-                    val labeledMarkdown = "PDF ENVIADO PELO USUÁRIO:\n$markdown"
+                    val labeledMarkdown = "$workspaceInfo\n\nPDF ENVIADO PELO USUÁRIO:\n$markdown"
                     LlmChatModelHelper.sendMessage(
                         message = labeledMarkdown,
                         onToken = { token ->
@@ -1099,7 +1114,7 @@ fun ChatScreen() {
                                     if (p.startsWith("limit ")) limit = p.removePrefix("limit ").trim().toIntOrNull() ?: 0
                                     else if (p.startsWith("offset ")) offset = p.removePrefix("offset ").trim().toIntOrNull() ?: 1
                                 }
-                                val result = if (path.startsWith("/")) FileReadTool.read(path, limit, offset) else FileReadTool.readPath(path)
+                                val result = if (path.startsWith("/")) FileReadTool.read(path, limit, offset) else FileReadTool.readPath(path, context)
                                 inputText = ""
                                 messages = messages + ChatMessage(text = result, isUser = true)
                                 return@Button
@@ -1173,6 +1188,23 @@ fun ChatScreen() {
             AppLogger.d(TAG, "User sent: $inputText")
             val userMessageText = inputText
 
+            // Workspace commands
+            if (userMessageText == "/workspace") {
+                val result = WorkspaceManager.listWorkspace(context)
+                inputText = ""
+                val toolMsg = ChatMessage(text = result, isUser = true)
+                messages = messages + toolMsg
+                return
+            }
+
+            if (userMessageText == "/ls-workspace") {
+                val result = WorkspaceManager.listMarkdown(context)
+                inputText = ""
+                val toolMsg = ChatMessage(text = result, isUser = true)
+                messages = messages + toolMsg
+                return
+            }
+
             // Check if it's a tool command
             if (userMessageText.startsWith("/read ") || userMessageText.startsWith("/file ") || userMessageText.startsWith("/ls ")) {
                 // File read tool command
@@ -1188,7 +1220,7 @@ fun ChatScreen() {
                 val result = if (path.startsWith("/")) {
                     FileReadTool.read(path, limit, offset)
                 } else {
-                    FileReadTool.readPath(path)
+                    FileReadTool.readPath(path, context)
                 }
                 inputText = ""
                 val toolMsg = ChatMessage(text = result, isUser = true)

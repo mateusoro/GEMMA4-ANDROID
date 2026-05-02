@@ -1,5 +1,6 @@
 package com.gemma.gpuchat
 
+import android.content.Context
 import java.io.File
 
 /**
@@ -34,10 +35,13 @@ object FileReadTool {
 
     /**
      * Read current working directory or a path relative to it.
+     * Uses WorkspaceManager markdown directory as base when context is provided.
      */
-    fun readPath(path: String): String {
-        val cwd = System.getProperty("user.dir")
-        val resolved = if (path.startsWith("/")) path else "$cwd/$path"
+    fun readPath(path: String, context: android.content.Context? = null): String {
+        val baseDir = context?.let {
+            WorkspaceManager.getMarkdownDir(it).absolutePath
+        } ?: System.getProperty("user.dir") ?: "/"
+        val resolved = if (path.startsWith("/")) path else "$baseDir/$path"
         val file = File(resolved)
         return when {
             !file.exists() -> "ERROR: Path not found: $path"
