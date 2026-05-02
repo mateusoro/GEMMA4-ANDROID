@@ -297,15 +297,12 @@ class PdfToMarkdownConverter(private val context: Context) {
      */
     private fun cleanupWhitespace(content: String): String {
         // Replace 3+ consecutive newlines with double newline (paragraph break)
-        var result = content.replace(Regex("\n{3,}"), "\n\n")
+        val result = content.replace(Regex("\n{3,}"), "\n\n")
 
         // Remove trailing spaces on each line
-        result = result.replace(Regex(""" +$"""), "")
-
-        // Remove leading whitespace from code blocks (preserve indentation)
-        // but normalize regular text lines
-
-        return result.trim()
+        val lines = result.split("\n")
+        val trimmedLines = lines.map { it.trimEnd() }
+        return trimmedLines.joinToString("\n").trim()
     }
 
     /**
