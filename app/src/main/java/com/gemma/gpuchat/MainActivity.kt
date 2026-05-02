@@ -89,6 +89,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.gemma.gpuchat.WorkspaceManager
 import com.gemma.gpuchat.AgentTools
+import com.google.ai.edge.litertlm.Channel
 import com.google.ai.edge.litertlm.Contents
 import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.tool
@@ -102,9 +103,9 @@ import java.io.File
 private const val TAG = "GemmaApp"
 
 // System instruction for the agent — tells Gemma about its available tools
+// <|think|> at the very start enables Gemma's built-in thinking/reasoning mode
 private fun getAgentSystemInstruction(): Contents {
-    val prompt = """
-You can do function call.
+    val prompt = """You can do function call.
 You have access to these functions:
 - listWorkspace() -> lists all files in the workspace (documents and markdown)
 - listMarkdown() -> lists only .md files in the workspace
@@ -120,6 +121,17 @@ Current date: ${java.time.LocalDateTime.now().format(java.time.format.DateTimeFo
     """.trimIndent()
 
     return Contents.of(prompt)
+}
+
+// Channel config for Gemma's built-in thinking/reasoning output
+// The model outputs reasoning between <|channel>thought\n and <channel|> markers
+// This content goes into Message.channels["thought"]
+private fun getThinkingChannel(): Channel {
+    return Channel(
+        channelName = "thought",
+        start = "<|channel>thought\n",
+        end = "<channel|>"
+    )
 }
 
 class MainActivity : ComponentActivity() {
@@ -168,6 +180,9 @@ fun ChatScreen() {
     var memoryInfo by remember { mutableStateOf<LlmChatModelHelper.MemoryInfo?>(null) }
     var systemMemoryInfo by remember { mutableStateOf<LlmChatModelHelper.SystemMemoryInfo?>(null) }
     var throughput by remember { mutableStateOf(0f) }
+
+    // Auto message state: 0=none, 1=oi sent, 2=done
+    var autoMessageState by remember { mutableStateOf(0) }
     var lastResponseTokenCount by remember { mutableStateOf(0) }
     var lastResponseDurationMs by remember { mutableStateOf(0L) }
     var responseStartTime by remember { mutableStateOf(0L) }
@@ -534,12 +549,17 @@ fun ChatScreen() {
             // Create AgentTools (once, outside IO thread)
             val agentTools = listOf(tool(AgentTools.create(context)))
             val sysInstruction = getAgentSystemInstruction()
-            AppLogger.d(TAG, "AgentTools created: ${agentTools.size} ToolProviders")
+            val thinkingChannel = getThinkingChannel()
+            AppLogger.d(TAG, "AgentTools created: ${agentTools.size} ToolProviders, thinking enabled")
 
             // Run initialization on IO thread with UI-safe callbacks
             val params = LlmPreferences.settingsToLlmParams(settings)
             withContext(Dispatchers.IO) {
-                LlmChatModelHelper.initialize(context, modelPath, params, agentTools, sysInstruction) { stage, progress ->
+                LlmChatModelHelper.initialize(
+                    context, modelPath, params, agentTools, sysInstruction,
+                    listOf(thinkingChannel),
+                    mapOf("enable_thinking" to true)
+                ) { stage, progress ->
                     // Post to main thread for Compose recomposition
                     mainHandler.post {
                         initStage = stage
@@ -565,6 +585,9 @@ fun ChatScreen() {
             initStage = "Pronto!"
             initProgress = 1f
             AppLogger.i(TAG, "Model initialized successfully!")
+
+            // Auto-test: send "oi" to trigger thinking mode
+            autoMessageState = 1
         } catch (e: Exception) {
             isInitializing = false
             AppLogger.e(TAG, "Model init failed", e)
@@ -579,8 +602,43 @@ fun ChatScreen() {
         return msgs.indexOfLast { !it.isUser }
     }
 
-    // Auto message state: 0=none, 1="Olá", 2="Qual a sua LLM", 3="O que voce sabe fazer", 4="Se apresente"
-    var autoMessageState by remember { mutableStateOf(0) }
+    // Auto-test: send "oi" when model is ready to test thinking mode
+    LaunchedEffect(isModelReady, autoMessageState) {
+        if (isModelReady && autoMessageState == 1) {
+            AppLogger.i(TAG, "[AUTO] Sending 'oi' to test thinking mode...")
+            val userMsg = ChatMessage(text = "oi", isUser = true)
+            messages = messages + userMsg
+            val botMsg = ChatMessage(text = "", isUser = false)
+            messages = messages + botMsg
+            val startTime = System.currentTimeMillis()
+
+            LlmChatModelHelper.sendMessage(
+                message = "oi",
+                onToken = { token ->
+                    AppLogger.d(TAG, "[THINK-TOKEN] $token")
+                    messages = messages.mapIndexed { index, msg ->
+                        if (index == getLastBotMessageIndex(messages) && !msg.isUser) {
+                            msg.copy(text = msg.text + token)
+                        } else msg
+                    }
+                },
+                onDone = {
+                    val lastBotIdx = messages.indexOfLast { !it.isUser }
+                    val duration = System.currentTimeMillis() - startTime
+                    val count = if (lastBotIdx >= 0) messages[lastBotIdx].text.length else 0
+                    val tp = if (duration > 0) (count * 1000f) / duration else 0f
+                    throughput = tp
+                    AppLogger.i(TAG, "[AUTO-DONE] 'oi' response: $count chars in ${duration}ms (${tp} tk/s)")
+                    AppLogger.i(TAG, "=== THINKING MODE TEST COMPLETE ===")
+                    autoMessageState = 2
+                },
+                onError = { error ->
+                    AppLogger.e(TAG, "[AUTO-ERROR] ${error.message}", error)
+                    autoMessageState = 2
+                }
+            )
+        }
+    }
 
     // Helper to send a message and chain to next state
     fun sendAutoMessage(text: String, nextState: Int, onDone: () -> Unit) {
@@ -622,82 +680,6 @@ fun ChatScreen() {
                 AppLogger.e(TAG, "[$prefix-ERROR] ${error.message}", error)
             }
         )
-    }
-
-    // Auto-send test sequence when model becomes ready
-    // State 0: "liste os arquivos do workspace" → State 1
-    // State 1: "leia o primeiro md" → State 2 (done)
-    LaunchedEffect(isModelReady) {
-        if (isModelReady && autoMessageState == 0) {
-            autoMessageState = 1
-
-            // STEP 1: List workspace files
-            val msg1 = ChatMessage(text = "liste os arquivos do workspace", isUser = true)
-            messages = messages + msg1
-            val botMsg1 = ChatMessage(text = "", isUser = false)
-            messages = messages + botMsg1
-            val startTime1 = System.currentTimeMillis()
-
-            LlmChatModelHelper.sendMessage(
-                message = msg1.text,
-                onToken = { token ->
-                    AppLogger.d(TAG, "[LISTA-TOKEN] $token")
-                    messages = messages.mapIndexed { index, msg ->
-                        if (index == getLastBotMessageIndex(messages) && !msg.isUser) {
-                            msg.copy(text = msg.text + token)
-                        } else msg
-                    }
-                },
-                onDone = {
-                    AppLogger.i(TAG, "[LISTA-DONE] Response complete")
-                    val lastBotIdx = messages.indexOfLast { !it.isUser }
-                    if (lastBotIdx >= 0) {
-                        val tokenCount = messages[lastBotIdx].text.length
-                        val duration = System.currentTimeMillis() - startTime1
-                        val tp = if (duration > 0) (tokenCount * 1000f) / duration else 0f
-                        throughput = tp
-                        AppLogger.i(TAG, "[LISTA-THROUGHPUT] tk/s=$tp count=$tokenCount dur=$duration")
-                    }
-                    // STEP 2: Read first md
-                    autoMessageState = 2
-                    val msg2 = ChatMessage(text = "leia o primeiro md", isUser = true)
-                    messages = messages + msg2
-                    val botMsg2 = ChatMessage(text = "", isUser = false)
-                    messages = messages + botMsg2
-                    val startTime2 = System.currentTimeMillis()
-
-                    LlmChatModelHelper.sendMessage(
-                        message = msg2.text,
-                        onToken = { token ->
-                            AppLogger.d(TAG, "[LEIA-TOKEN] $token")
-                            messages = messages.mapIndexed { index, msg ->
-                                if (index == getLastBotMessageIndex(messages) && !msg.isUser) {
-                                    msg.copy(text = msg.text + token)
-                                } else msg
-                            }
-                        },
-                        onDone = {
-                            AppLogger.i(TAG, "[LEIA-DONE] Response complete")
-                            val lastBotIdx = messages.indexOfLast { !it.isUser }
-                            if (lastBotIdx >= 0) {
-                                val tokenCount = messages[lastBotIdx].text.length
-                                val duration = System.currentTimeMillis() - startTime2
-                                val tp = if (duration > 0) (tokenCount * 1000f) / duration else 0f
-                                throughput = tp
-                                AppLogger.i(TAG, "[LEIA-THROUGHPUT] tk/s=$tp count=$tokenCount dur=$duration")
-                            }
-                            AppLogger.i(TAG, "=== AUTO TEST SEQUENCE COMPLETE ===")
-                        },
-                        onError = { error ->
-                            AppLogger.e(TAG, "[LEIA-ERROR] ${error.message}", error)
-                        }
-                    )
-                },
-                onError = { error ->
-                    AppLogger.e(TAG, "[LISTA-ERROR] ${error.message}", error)
-                }
-            )
-        }
     }
 
     // Cleanup on dispose

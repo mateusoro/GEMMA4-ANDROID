@@ -13,6 +13,7 @@ import com.google.ai.edge.litertlm.tool
 import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.ExperimentalApi
 import com.google.ai.edge.litertlm.SamplerConfig
+import com.google.ai.edge.litertlm.Channel
 import com.google.ai.edge.litertlm.Conversation
 import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.MessageCallback
@@ -40,6 +41,8 @@ object LlmChatModelHelper {
     private var currentContext: Context? = null
     private var currentTools: List<ToolProvider> = emptyList()
     private var currentSystemInstruction: Contents? = null
+    private var currentChannels: List<Channel>? = null
+    private var currentExtraContext: Map<String, Any>? = null
 
     fun getParams(): LlmParams = currentParams
 
@@ -95,6 +98,8 @@ object LlmChatModelHelper {
         params: LlmParams = LlmParams(),
         tools: List<ToolProvider> = emptyList(),
         systemInstruction: Contents? = null,
+        channels: List<Channel>? = null,
+        extraContext: Map<String, Any>? = null,
         onProgress: (String, Int) -> Unit = { _, _ -> }
     ) {
         currentParams = params
@@ -102,11 +107,14 @@ object LlmChatModelHelper {
         currentContext = context
         currentTools = tools
         currentSystemInstruction = systemInstruction
+        currentChannels = channels
+        currentExtraContext = extraContext
         AppLogger.d(TAG, ">>> initialize() CALLED <<<")
         AppLogger.d(TAG, "modelPath: $modelPath")
         AppLogger.d(TAG, "params: maxTokens=${params.maxNumTokens}, temp=${params.temperature}, topK=${params.topK}, topP=${params.topP}")
         AppLogger.d(TAG, "tools: ${tools.size} ToolProviders")
-        AppLogger.d(TAG, "systemInstruction: ${if (systemInstruction != null) "provided" else "null"}")
+        AppLogger.d(TAG, "extraContext: $extraContext")
+        AppLogger.d(TAG, "channels: ${channels?.size ?: 0} Channel(s)")
         AppLogger.d(TAG, "filesDir: ${context.filesDir}")
 
         onProgress("Procurando modelo...", 0)
@@ -213,7 +221,7 @@ object LlmChatModelHelper {
             topP = currentParams.topP.toDouble(),
             temperature = currentParams.temperature.toDouble()
         )
-        val convConfig = ConversationConfig(samplerConfig = samplerConfig, tools = currentTools, systemInstruction = currentSystemInstruction)
+        val convConfig = ConversationConfig(samplerConfig = samplerConfig, tools = currentTools, systemInstruction = currentSystemInstruction, channels = currentChannels, extraContext = currentExtraContext ?: emptyMap())
         conversation = engine!!.createConversation(convConfig)
         AppLogger.d(TAG, "Conversation created: $conversation with sampler topK=${currentParams.topK}, topP=${currentParams.topP}, temp=${currentParams.temperature}")
         AppLogger.d(TAG, "[PROGRESS] Conversa pronta! (90%)")
@@ -229,7 +237,7 @@ object LlmChatModelHelper {
             topP = currentParams.topP.toDouble(),
             temperature = currentParams.temperature.toDouble()
         )
-        val convConfig = ConversationConfig(samplerConfig = samplerConfig, tools = currentTools, systemInstruction = currentSystemInstruction)
+        val convConfig = ConversationConfig(samplerConfig = samplerConfig, tools = currentTools, systemInstruction = currentSystemInstruction, channels = currentChannels, extraContext = currentExtraContext ?: emptyMap())
         return engine!!.createConversation(convConfig)
     }
 
@@ -265,6 +273,13 @@ object LlmChatModelHelper {
                 }
                 val text = message.toString()
                 AppLogger.d(TAG, "onMessage: '$text'")
+
+                // Also log thinking channel content if present
+                val thinkingContent = message.channels["thought"]
+                if (!thinkingContent.isNullOrEmpty()) {
+                    AppLogger.d(TAG, "[THOUGHT-CHANNEL] $thinkingContent")
+                }
+
                 try {
                     onToken(text)
                 } catch (e: Exception) {
@@ -429,9 +444,11 @@ AppLogger.d(TAG, "Sending audio as WAV ${wrapAudioInWav(audioBytes).size} bytes 
         val path = currentModelPath
         val tools = currentTools
         val sysInstr = currentSystemInstruction
+        val ch = currentChannels
+        val extra = currentExtraContext
         release()
         currentParams = params
-        initialize(ctx, path, params, tools, sysInstr, onProgress)
+        initialize(ctx, path, params, tools, sysInstr, ch, extra, onProgress)
     }
 
     fun isInitialized(): Boolean = engine != null && conversation != null
