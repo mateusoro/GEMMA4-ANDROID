@@ -103,45 +103,23 @@ private const val TAG = "GemmaApp"
 
 // System instruction for the agent — tells Gemma about its available tools
 private fun getAgentSystemInstruction(): Contents {
-    val toolsDescription = """
-# Você é um assistente de IA com ferramentas para interagir com o dispositivo.
+    val prompt = """
+You can do function call.
+You have access to these functions:
+- listWorkspace() -> lists all files in the workspace (documents and markdown)
+- listMarkdown() -> lists only .md files in the workspace
+- readWorkspaceFile(filename) -> reads a file content. Pass just the filename like "documento.md", the function searches in both markdown/ and documents/ folders automatically
+- saveMarkdownFile(filename, content) -> saves a .md file
+- showLocationOnMap(location) -> opens the map with the specified location
+- createCalendarEvent(datetime, title) -> creates a calendar event. datetime format: "2026-05-15T14:00:00"
+- getDeviceInfo() -> returns current date, time and memory info
 
-## Ferramentas Disponíveis
+When a user asks you to read, list or manage files, always call listWorkspace() first to see what files exist, then use readWorkspaceFile() to read content.
 
-### Arquivos (Workspace)
-- **listWorkspace()** → lista TODOS os arquivos (documents + markdown). Retorna lista formatada com [PDF] ou [MD].
-- **listMarkdown()** → lista apenas arquivos .md no workspace.
-- **readWorkspaceFile(filename)** → lê o conteúdo de um arquivo. Passe apenas o nome, ex: "documento.md" ou "relatorio.pdf". NÃO inclua "markdown/" ou "documents/" no nome — a função já procura em ambos os diretórios.
-- **saveMarkdownFile(filename, content)** → salva conteúdo .md no workspace. Ex: filename="nota.md", content="# Minha Nota..."
-
-### Localização e Calendário
-- **showLocationOnMap(location)** → abre mapa. Ex: location="São Paulo, SP"
-- **createCalendarEvent(datetime, title)** → cria evento. datetime no formato "2026-05-15T14:00:00", title="Reunião com João"
-
-### Informações do Dispositivo
-- **getDeviceInfo()** → retorna data, hora e memória.
-
-## Regras importantes
-
-1. **SEMPRE chame listWorkspace() primeiro** quando o usuário pedir para ver arquivos, ler documentos, ou qualquer coisa relacionada ao workspace.
-2. **Use readWorkspaceFile()** para ler conteúdo. Passe apenas o nome simples do arquivo, sem caminhos como "markdown/" ou "documents/". A função procura automaticamente.
-3. **Ferramentas são chamadas AUTOMATICAMENTE pelo modelo** — quando o usuário pede algo, pense qual ferramenta usar e chame-a. O modelo vai mostrar o resultado da tool call e então responder ao usuário.
-4. **O workspace fica em** app/filesDir/workspace/ com subpastas `documents/` (PDFs) e `markdown/` (arquivos .md).
-
-## Exemplo de como funciona:
-Usuário: "Liste os arquivos no workspace"
-Você deve chamar: listWorkspace()
-Resultado: lista de arquivos -> você mostra ao usuário
-
-Usuário: "Leia o arquivo documento.md"
-Você deve chamar: readWorkspaceFile("documento.md")
-Resultado: conteúdo do arquivo -> você resume ou analisa
+Current date: ${java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))}
     """.trimIndent()
 
-    return Contents.of(listOf(
-        Content.Text(toolsDescription),
-        Content.Text("Data atual: ${java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))}")
-    ))
+    return Contents.of(prompt)
 }
 
 class MainActivity : ComponentActivity() {
@@ -646,23 +624,24 @@ fun ChatScreen() {
         )
     }
 
-    // Auto-send "Olá" when model becomes ready
+    // Auto-send test sequence when model becomes ready
+    // State 0: "liste os arquivos do workspace" → State 1
+    // State 1: "leia o primeiro md" → State 2 (done)
     LaunchedEffect(isModelReady) {
         if (isModelReady && autoMessageState == 0) {
-            AppLogger.i(TAG, "Model ready - auto-sending Olá")
             autoMessageState = 1
 
-            val userMessage = ChatMessage(text = "Olá", isUser = true)
-            messages = messages + userMessage
+            // STEP 1: List workspace files
+            val msg1 = ChatMessage(text = "liste os arquivos do workspace", isUser = true)
+            messages = messages + msg1
+            val botMsg1 = ChatMessage(text = "", isUser = false)
+            messages = messages + botMsg1
+            val startTime1 = System.currentTimeMillis()
 
-            val botMsg = ChatMessage(text = "", isUser = false)
-            messages = messages + botMsg
-
-            val startTime = System.currentTimeMillis()
             LlmChatModelHelper.sendMessage(
-                message = userMessage.text,
+                message = msg1.text,
                 onToken = { token ->
-                    AppLogger.d(TAG, "[OLA-RESPONSE-TOKEN] $token")
+                    AppLogger.d(TAG, "[LISTA-TOKEN] $token")
                     messages = messages.mapIndexed { index, msg ->
                         if (index == getLastBotMessageIndex(messages) && !msg.isUser) {
                             msg.copy(text = msg.text + token)
@@ -670,23 +649,52 @@ fun ChatScreen() {
                     }
                 },
                 onDone = {
-                    AppLogger.i(TAG, "[OLA-RESPONSE-DONE] Response complete")
+                    AppLogger.i(TAG, "[LISTA-DONE] Response complete")
                     val lastBotIdx = messages.indexOfLast { !it.isUser }
                     if (lastBotIdx >= 0) {
                         val tokenCount = messages[lastBotIdx].text.length
-                        val duration = System.currentTimeMillis() - startTime
+                        val duration = System.currentTimeMillis() - startTime1
                         val tp = if (duration > 0) (tokenCount * 1000f) / duration else 0f
                         throughput = tp
-                        AppLogger.i(TAG, "[OLA-RESPONSE-THROUGHPUT] tk/s=$tp count=$tokenCount dur=$duration")
-                        messages = messages.mapIndexed { idx, msg ->
-                            if (idx == lastBotIdx) {
-                                msg.copy(throughput = tp, tokenCount = tokenCount, durationMs = duration)
-                            } else msg
-                        }
+                        AppLogger.i(TAG, "[LISTA-THROUGHPUT] tk/s=$tp count=$tokenCount dur=$duration")
                     }
+                    // STEP 2: Read first md
+                    autoMessageState = 2
+                    val msg2 = ChatMessage(text = "leia o primeiro md", isUser = true)
+                    messages = messages + msg2
+                    val botMsg2 = ChatMessage(text = "", isUser = false)
+                    messages = messages + botMsg2
+                    val startTime2 = System.currentTimeMillis()
+
+                    LlmChatModelHelper.sendMessage(
+                        message = msg2.text,
+                        onToken = { token ->
+                            AppLogger.d(TAG, "[LEIA-TOKEN] $token")
+                            messages = messages.mapIndexed { index, msg ->
+                                if (index == getLastBotMessageIndex(messages) && !msg.isUser) {
+                                    msg.copy(text = msg.text + token)
+                                } else msg
+                            }
+                        },
+                        onDone = {
+                            AppLogger.i(TAG, "[LEIA-DONE] Response complete")
+                            val lastBotIdx = messages.indexOfLast { !it.isUser }
+                            if (lastBotIdx >= 0) {
+                                val tokenCount = messages[lastBotIdx].text.length
+                                val duration = System.currentTimeMillis() - startTime2
+                                val tp = if (duration > 0) (tokenCount * 1000f) / duration else 0f
+                                throughput = tp
+                                AppLogger.i(TAG, "[LEIA-THROUGHPUT] tk/s=$tp count=$tokenCount dur=$duration")
+                            }
+                            AppLogger.i(TAG, "=== AUTO TEST SEQUENCE COMPLETE ===")
+                        },
+                        onError = { error ->
+                            AppLogger.e(TAG, "[LEIA-ERROR] ${error.message}", error)
+                        }
+                    )
                 },
                 onError = { error ->
-                    AppLogger.e(TAG, "[OLA-RESPONSE-ERROR] ${error.message}", error)
+                    AppLogger.e(TAG, "[LISTA-ERROR] ${error.message}", error)
                 }
             )
         }
