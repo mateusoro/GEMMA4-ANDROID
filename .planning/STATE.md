@@ -1,12 +1,12 @@
 # State: Gemma4Android
 
-**Last updated:** 2026-05-02 after Phase 6 creation
+**Last updated:** 2026-05-02 after Phase 4 execution
 
 ---
 
 ## Current Phase
 
-**Phase 6:** Testing Standard — 📋 Planned
+**Phase 4:** Settings + System Prompt — ✅ **Complete**
 
 ---
 
@@ -18,28 +18,17 @@
 | Phase 1 | ✅ Complete | 4 plans executed |
 | Phase 2 | ✅ Complete | WAV header fix applied |
 | Phase 3 | ✅ Complete | Notification-based PDF processing |
-| Phase 4 | ⏳ Pending | Settings + system prompt |
+| Phase 4 | ✅ Complete | Settings slider ranges fixed, params applied on save |
 | Phase 5 | ⏳ Pending | Edge-to-edge UI |
-| Phase 6 | ⏳ Pending | Testing Standard — document TestHarnessActivity |
+| Phase 6 | ✅ Complete | TestHarnessActivity formalized as standard |
 
 ---
 
-## Phase 3 Results
+## Phase 4 Results
 
 | Plan | Wave | Status | Summary |
 |------|------|--------|---------|
-| PDF-01 | 1 | ✅ Complete | Changed from content injection to notification-based — model receives filename only |
-
-**Executed:** 2026-05-02
-**Plans:** 1 complete, 0 failed
-
----
-
-## Phase 6 Status
-
-| Plan | Wave | Status | Summary |
-|------|------|--------|---------|
-| TEST-STD-01 | 1 | ✅ Complete | CLAUDE.md updated with full Testing Standard section |
+| SETP-01 | 1 | ✅ Complete | Fixed slider ranges, apply params on save, add settings tests |
 
 **Executed:** 2026-05-02
 **Plans:** 1 complete, 0 failed
@@ -57,7 +46,8 @@
 - Phase 1: Completed 2026-05-02 — 4 plans, all complete
 - Phase 2: Completed 2026-05-02 — WAV header fileSize fix (56 + dataSize)
 - Phase 3: Completed 2026-05-02 — Notification-based PDF processing (no content injection)
-- Phase 6: Created 2026-05-02 — Formalize TestHarnessActivity as project standard
+- Phase 4: Completed 2026-05-02 — Settings slider ranges fixed, params applied on save
+- Phase 6: Completed 2026-05-02 — TestHarnessActivity formalized as standard
 
 ---
 
@@ -71,10 +61,10 @@
 
 ## Session Continuity
 
-Last session: 2026-05-02 (Phase 6 completed)
-Stopped at: Phase 6 done — Testing Standard documented in CLAUDE.md
-Next: Phase 4 (Settings + System Prompt) or Phase 5 (Edge-to-Edge UI)
+Last session: 2026-05-02 (Phase 4 completed)
+Stopped at: Phase 4 done — Settings sliders fixed, params applied immediately, 69/69 tests passing
+Next: Phase 5 (Edge-to-Edge UI)
 
 ---
 
-*State updated: 2026-05-02 after Phase 6 completion*
+*State updated: 2026-05-02 after Phase 4 execution*
