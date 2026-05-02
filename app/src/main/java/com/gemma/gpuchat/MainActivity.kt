@@ -297,6 +297,15 @@ fun ChatScreen() {
     ) { uri ->
         AppLogger.i(TAG, "PDF selected: $uri")
         if (uri != null) {
+            // Take persistent read permission so we can access later
+            val takeFlags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+            try {
+                context.contentResolver.takePersistableUriPermission(uri, takeFlags)
+                AppLogger.d(TAG, "Persistable URI permission granted for: $uri")
+            } catch (e: Exception) {
+                AppLogger.w(TAG, "Could not take persistable permission: ${e.message}")
+            }
+
             // Add loading message
             val loadingMsg = ChatMessage(text = "📄 Processando PDF...", isUser = false)
             messages = messages + loadingMsg
@@ -306,14 +315,22 @@ fun ChatScreen() {
                 try {
                     val markdown = withContext(Dispatchers.IO) {
                         val converter = PdfToMarkdownConverter(context)
-                        val inputStream = context.contentResolver.openInputStream(uri)
-                        val result = if (inputStream != null) {
-                            converter.convert(inputStream)
-                        } else {
-                            "Erro: não foi possível abrir o PDF"
+                        try {
+                            val inputStream = context.contentResolver.openInputStream(uri)
+                            if (inputStream != null) {
+                                AppLogger.d(TAG, "InputStream opened successfully for: $uri")
+                                val result = converter.convert(inputStream)
+                                inputStream.close()
+                                AppLogger.i(TAG, "PDF converted to Markdown (${result.length} chars)")
+                                result
+                            } else {
+                                AppLogger.e(TAG, "InputStream was null for URI: $uri")
+                                "Erro: não foi possível abrir o PDF (input stream null)"
+                            }
+                        } catch (e: Exception) {
+                            AppLogger.e(TAG, "PDF conversion exception: ${e.message}", e)
+                            "Erro ao processar PDF: ${e.message}"
                         }
-                        inputStream?.close()
-                        result
                     }
                     // Remove loading message
                     messages = messages.filter { !it.text.startsWith("📄 Processando") }
@@ -324,8 +341,9 @@ fun ChatScreen() {
                     messages = messages + ChatMessage(text = "", isUser = false)
                     val startTime = System.currentTimeMillis()
                     AppLogger.i(TAG, "PDF converted to Markdown (${markdown.length} chars), sending to model")
+                    val labeledMarkdown = "PDF ENVIADO PELO USUÁRIO:\n$markdown"
                     LlmChatModelHelper.sendMessage(
-                        message = markdown,
+                        message = labeledMarkdown,
                         onToken = { token ->
                             AppLogger.d(TAG, "[PDF-RESP-TOKEN] $token")
                             mainHandler.post {
@@ -1067,85 +1085,72 @@ fun ChatScreen() {
                     }
                     Button(
                         onClick = {
-                            AppLogger.i(TAG, "SEND BUTTON CLICKED isModelReady=$isModelReady inputBlank=${inputText.isBlank()}")
-                            if (inputText.isBlank() || !isModelReady) {
-                                AppLogger.i(TAG, "SEND BLOCKED: blank=$inputText.isBlank() ready=$isModelReady")
+                            val text = inputText
+                            if (text.isBlank() || !isModelReady) return@Button
+
+                            // File read tool commands
+                            if (text.startsWith("/read ") || text.startsWith("/file ") || text.startsWith("/ls ")) {
+                                val args = text.removePrefix("/read ").removePrefix("/file ").removePrefix("/ls ")
+                                val parts = args.split(" -- ")
+                                val path = parts[0].trim()
+                                var limit = 0; var offset = 1
+                                for (i in 1 until parts.size) {
+                                    val p = parts[i].trim()
+                                    if (p.startsWith("limit ")) limit = p.removePrefix("limit ").trim().toIntOrNull() ?: 0
+                                    else if (p.startsWith("offset ")) offset = p.removePrefix("offset ").trim().toIntOrNull() ?: 1
+                                }
+                                val result = if (path.startsWith("/")) FileReadTool.read(path, limit, offset) else FileReadTool.readPath(path)
+                                inputText = ""
+                                messages = messages + ChatMessage(text = result, isUser = true)
                                 return@Button
                             }
 
-                            AppLogger.d(TAG, "User sent: $inputText")
-                            val userMessage = ChatMessage(
-                                text = inputText,
-                                isUser = true
-                            )
-                            messages = messages + userMessage
-                            inputText = ""
-
-                            val startTime = System.currentTimeMillis()
-                            messages = messages + ChatMessage(
-                                text = "",
-                                isUser = false
-                            )
-
-                            LlmChatModelHelper.sendMessage(
-                                message = userMessage.text,
-                                onToken = { token ->
-                                    AppLogger.d(TAG, "Token: $token")
-                                    mainHandler.post {
-                                        val lastBotIdx = messages.indexOfLast { !it.isUser }
-                                        AppLogger.d(TAG, "onToken: lastBotIdx=$lastBotIdx messages=${messages.size}")
-                                        if (lastBotIdx >= 0) {
-                                            val currentMsg = messages[lastBotIdx]
-                                            messages = messages.mapIndexed { idx, msg ->
-                                                if (idx == lastBotIdx) {
-                                                    msg.copy(text = msg.text + token)
-                                                } else msg
-                                            }
-                                        }
-                                    }
-                                },
-                                onDone = {
-                                    AppLogger.i(TAG, "onDone callback fired")
-                                    mainHandler.post {
-                                        AppLogger.i(TAG, "onDone mainHandler.post running")
-                                        memoryInfo = LlmChatModelHelper.getMemoryUsage()
-                                        systemMemoryInfo = LlmChatModelHelper.getSystemMemory(context)
-                                        val lastBotIdx = messages.indexOfLast { !it.isUser }
-                                        AppLogger.i(TAG, "onDone: lastBotIdx=$lastBotIdx totalMessages=${messages.size}")
-                                        if (lastBotIdx >= 0) {
-                                            val tokenCount = messages[lastBotIdx].text.length
-                                            val duration = System.currentTimeMillis() - startTime
-                                            val tp = if (duration > 0) (tokenCount * 1000f) / duration else 0f
-                                            AppLogger.i(TAG, "Throughput: tp=$tp count=$tokenCount duration=$duration")
-                                            throughput = tp
-                                            messages = messages.mapIndexed { idx, msg ->
-                                                if (idx == lastBotIdx) {
-                                                    msg.copy(throughput = tp, tokenCount = tokenCount, durationMs = duration)
-                                                } else msg
-                                            }
-                                            AppLogger.i(TAG, "onDone: metrics attached to message idx=$lastBotIdx tp=$tp")
-                                            // Auto-save conversation after response
-                                            currentConversationId?.let { convId ->
-                                                scope.launch {
-                                                    val conv = Conversation(
-                                                        id = convId,
-                                                        title = messages.firstOrNull { it.isUser }?.text?.take(30) ?: "Nova conversa",
-                                                        messages = messages,
-                                                        createdAt = System.currentTimeMillis(),
-                                                        updatedAt = System.currentTimeMillis()
-                                                    )
-                                                    ChatHistoryManager.saveConversation(context, conv)
-                                                }
-                                            }
-                                        }
-                                    }
-                                },
-                                onError = { error ->
-                                    AppLogger.e(TAG, "Error: ${error.message}", error)
-                                    scope.launch {
-                                        snackbarHostState.showSnackbar("Error: ${error.message}")
-                                    }
+                            if (text.startsWith("/grep ")) {
+                                val args = text.removePrefix("/grep ")
+                                val parts = args.split(" -- ", limit = 2)
+                                val path = parts.getOrElse(0) { "" }
+                                val pattern = parts.getOrElse(1) { "" }
+                                if (path.isNotEmpty() && pattern.isNotEmpty()) {
+                                    val result = FileReadTool.grep(path, pattern)
+                                    inputText = ""
+                                    messages = messages + ChatMessage(text = result, isUser = true)
                                 }
+                                return@Button
+                            }
+
+                            // Normal text message
+                            inputText = ""
+                            messages = messages + ChatMessage(text = text, isUser = true)
+                            val startTime = System.currentTimeMillis()
+                            messages = messages + ChatMessage(text = "", isUser = false)
+                            LlmChatModelHelper.sendMessage(
+                                message = text,
+                                onToken = { token -> mainHandler.post {
+                                    val lastBotIdx = messages.indexOfLast { !it.isUser }
+                                    if (lastBotIdx >= 0) messages = messages.mapIndexed { idx, msg -> if (idx == lastBotIdx) msg.copy(text = msg.text + token) else msg }
+                                } },
+                                onDone = { mainHandler.post {
+                                    val lastBotIdx = messages.indexOfLast { !it.isUser }
+                                    if (lastBotIdx >= 0) {
+                                        val tokenCount = messages[lastBotIdx].text.length
+                                        val duration = System.currentTimeMillis() - startTime
+                                        val tp = if (duration > 0) (tokenCount * 1000f) / duration else 0f
+                                        throughput = tp
+                                        messages = messages.mapIndexed { idx, msg -> if (idx == lastBotIdx) msg.copy(throughput = tp, tokenCount = tokenCount, durationMs = duration) else msg }
+                                    }
+                                    memoryInfo = LlmChatModelHelper.getMemoryUsage()
+                                    systemMemoryInfo = LlmChatModelHelper.getSystemMemory(context)
+                                    currentConversationId?.let { convId ->
+                                        scope.launch {
+                                            val conv = Conversation(id = convId, title = messages.firstOrNull { it.isUser }?.text?.take(30) ?: "Nova conversa", messages = messages, createdAt = System.currentTimeMillis(), updatedAt = System.currentTimeMillis())
+                                            ChatHistoryManager.saveConversation(context, conv)
+                                        }
+                                    }
+                                } },
+                                onError = { error -> mainHandler.post {
+                                    val lastBotIdx = messages.indexOfLast { !it.isUser }
+                                    if (lastBotIdx >= 0) messages = messages.mapIndexed { idx, msg -> if (idx == lastBotIdx) msg.copy(text = "Erro: ${error.message}") else msg }
+                                } }
                             )
                         },
                         enabled = isModelReady && inputText.isNotBlank()
@@ -1156,6 +1161,123 @@ fun ChatScreen() {
             }
         }
     }
+
+        // Send message handler - extracted for reuse by keyboard send action
+        fun handleSendMessage() {
+            AppLogger.i(TAG, "SEND BUTTON CLICKED isModelReady=$isModelReady inputBlank=${inputText.isBlank()}")
+            if (inputText.isBlank() || !isModelReady) {
+                AppLogger.i(TAG, "SEND BLOCKED: blank=$inputText.isBlank() ready=$isModelReady")
+                return
+            }
+
+            AppLogger.d(TAG, "User sent: $inputText")
+            val userMessageText = inputText
+
+            // Check if it's a tool command
+            if (userMessageText.startsWith("/read ") || userMessageText.startsWith("/file ") || userMessageText.startsWith("/ls ")) {
+                // File read tool command
+                val args = userMessageText.removePrefix("/read ").removePrefix("/file ").removePrefix("/ls ")
+                val parts = args.split(" -- ")
+                val path = parts[0].trim()
+                var limit = 0; var offset = 1
+                for (i in 1 until parts.size) {
+                    val p = parts[i].trim()
+                    if (p.startsWith("limit ")) limit = p.removePrefix("limit ").trim().toIntOrNull() ?: 0
+                    else if (p.startsWith("offset ")) offset = p.removePrefix("offset ").trim().toIntOrNull() ?: 1
+                }
+                val result = if (path.startsWith("/")) {
+                    FileReadTool.read(path, limit, offset)
+                } else {
+                    FileReadTool.readPath(path)
+                }
+                inputText = ""
+                val toolMsg = ChatMessage(text = result, isUser = true)
+                messages = messages + toolMsg
+                return
+            }
+
+            if (userMessageText.startsWith("/grep ")) {
+                val args = userMessageText.removePrefix("/grep ")
+                val parts = args.split(" -- ", limit = 2)
+                val path = parts.getOrElse(0) { "" }
+                val pattern = parts.getOrElse(1) { "" }
+                if (path.isNotEmpty() && pattern.isNotEmpty()) {
+                    val result = FileReadTool.grep(path, pattern)
+                    inputText = ""
+                    val toolMsg = ChatMessage(text = result, isUser = true)
+                    messages = messages + toolMsg
+                    return
+                }
+            }
+
+            inputText = ""
+            val userMessage = ChatMessage(text = userMessageText, isUser = true)
+            messages = messages + userMessage
+
+            val startTime = System.currentTimeMillis()
+            messages = messages + ChatMessage(text = "", isUser = false)
+
+            LlmChatModelHelper.sendMessage(
+                message = userMessageText,
+                onToken = { token ->
+                    AppLogger.d(TAG, "Token: $token")
+                    mainHandler.post {
+                        val lastBotIdx = messages.indexOfLast { !it.isUser }
+                        AppLogger.d(TAG, "onToken: lastBotIdx=$lastBotIdx messages=${messages.size}")
+                        if (lastBotIdx >= 0) {
+                            val currentMsg = messages[lastBotIdx]
+                            messages = messages.mapIndexed { idx, msg ->
+                                if (idx == lastBotIdx) {
+                                    msg.copy(text = msg.text + token)
+                                } else msg
+                            }
+                        }
+                    }
+                },
+                onDone = {
+                    AppLogger.i(TAG, "onDone callback fired")
+                    mainHandler.post {
+                        AppLogger.i(TAG, "onDone mainHandler.post running")
+                        memoryInfo = LlmChatModelHelper.getMemoryUsage()
+                        systemMemoryInfo = LlmChatModelHelper.getSystemMemory(context)
+                        val lastBotIdx = messages.indexOfLast { !it.isUser }
+                        AppLogger.i(TAG, "onDone: lastBotIdx=$lastBotIdx totalMessages=${messages.size}")
+                        if (lastBotIdx >= 0) {
+                            val tokenCount = messages[lastBotIdx].text.length
+                            val duration = System.currentTimeMillis() - startTime
+                            val tp = if (duration > 0) (tokenCount * 1000f) / duration else 0f
+                            AppLogger.i(TAG, "Throughput: tp=$tp count=$tokenCount duration=$duration")
+                            throughput = tp
+                            messages = messages.mapIndexed { idx, msg ->
+                                if (idx == lastBotIdx) {
+                                    msg.copy(throughput = tp, tokenCount = tokenCount, durationMs = duration)
+                                } else msg
+                            }
+                            AppLogger.i(TAG, "onDone: metrics attached to message idx=$lastBotIdx tp=$tp")
+                            // Auto-save conversation after response
+                            currentConversationId?.let { convId ->
+                                scope.launch {
+                                    val conv = Conversation(
+                                        id = convId,
+                                        title = messages.firstOrNull { it.isUser }?.text?.take(30) ?: "Nova conversa",
+                                        messages = messages,
+                                        createdAt = System.currentTimeMillis(),
+                                        updatedAt = System.currentTimeMillis()
+                                    )
+                                    ChatHistoryManager.saveConversation(context, conv)
+                                }
+                            }
+                        }
+                    }
+                },
+                onError = { error ->
+                    AppLogger.e(TAG, "Error: ${error.message}", error)
+                    scope.launch {
+                        snackbarHostState.showSnackbar("Error: ${error.message}")
+                    }
+                }
+            )
+        }
 
         // Settings Dialog
         if (showSettings) {
