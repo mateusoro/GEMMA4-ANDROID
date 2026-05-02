@@ -20,6 +20,7 @@
 | Phase 3 | ✅ Complete | Notification-based PDF processing |
 | Phase 4 | ⏳ Pending | Settings + system prompt |
 | Phase 5 | ⏳ Pending | Edge-to-edge UI |
+| Phase 6 | ⏳ Pending | Testing Standard — document TestHarnessActivity |
 
 ---
 

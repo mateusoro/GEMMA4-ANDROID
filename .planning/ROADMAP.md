@@ -96,6 +96,21 @@
 
 ---
 
+## Phase 6: Testing Standard
+
+**Goal:** Formalize TestHarnessActivity in-app testing as the project standard for all future phases.
+
+**Requirements:** TEST-01
+
+**Success Criteria:**
+1. TestHarnessActivity is the standard test harness for all unit/logic tests
+2. Every new phase includes a `runXxxTests()` block in TestHarnessActivity
+3. All tests run via `adb shell am start -n com.gemma.gpuchat/.TestHarnessActivity`
+4. Results verified via `adb shell "run-as com.gemma.gpuchat cat files/test_results/test_results.txt"`
+5. TestHarnessActivity remains in app/src/main/ (not src/test/) due to AGP classpath limitations with JDK 24/21 toolchain
+
+---
+
 ## Summary
 
 | # | Phase | Goal | Requirements | Success Criteria |
@@ -105,6 +120,7 @@
 | 3 | PDF + Workspace | PDF processing + files | 3 reqs | 5 criteria |
 | 4 | Settings + System Prompt | Persist user preferences | 3 reqs | 7 criteria |
 | 5 | Edge-to-Edge UI | Modern Android insets | 1 req | 4 criteria |
+| 6 | Testing Standard | TestHarnessActivity as project standard | 1 req | 5 criteria |
 
 **All v1 requirements covered:** 22/22 ✓
 
