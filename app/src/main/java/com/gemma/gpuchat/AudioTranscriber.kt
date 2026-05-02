@@ -131,7 +131,7 @@ class AudioTranscriber(private val context: Context) {
         val blockAlign = numChannels * bitsPerSample / 8
         val dataSize = audioBytes.size
         val numSamples = dataSize / (bitsPerSample / 8)
-        val fileSize = 44 + dataSize
+        val fileSize = 56 + dataSize
 
         val wav = ByteArray(56 + dataSize)
         wav[0] = 'R'.code.toByte(); wav[1] = 'I'.code.toByte(); wav[2] = 'F'.code.toByte(); wav[3] = 'F'.code.toByte()

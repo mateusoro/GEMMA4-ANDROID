@@ -350,7 +350,7 @@ private fun wrapAudioInWav(audioBytes: ByteArray): ByteArray {
         val blockAlign = numChannels * bitsPerSample / 8
         val dataSize = audioBytes.size
         val numSamples = dataSize / (bitsPerSample / 8)
-        val fileSize = 44 + dataSize
+        val fileSize = 56 + dataSize
 
         val wav = ByteArray(56 + dataSize)
         // RIFF header
