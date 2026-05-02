@@ -370,23 +370,26 @@ fun ChatScreen() {
                     messages = messages.filter { !it.text.startsWith("📄 Processando") }
                     // Salvar PDF e Markdown no workspace
                     val pdfPath = WorkspaceManager.savePdf(context, uri)
-                    val mdFileName = uri.lastPathSegment?.substringAfterLast('/')?.replace(".pdf", "") ?: "document"
+                    val mdFileName = uri.lastPathSegment?.substringAfterLast('/')?.replace(".pdf", "")?.take(100) ?: "document"
                     val mdPath = WorkspaceManager.saveMarkdown(context, mdFileName, markdown)
+                    val savedMdFileName = mdPath?.substringAfterLast('/') ?: "$mdFileName.md"
                     val workspaceInfo = buildString {
                         appendLine("📁 Workspace atualizado:")
                         if (pdfPath != null) appendLine("   ✓ PDF salvo: workspace/documents/${File(pdfPath).name}")
-                        if (mdPath != null) appendLine("   ✓ Markdown salvo: workspace/markdown/${File(mdPath).name}")
+                        if (mdPath != null) appendLine("   ✓ Markdown salvo: workspace/markdown/$savedMdFileName")
                     }
-                    // Add PDF content as user message
-                    val pdfMsg = ChatMessage(text = markdown, isUser = true)
-                    messages = messages + pdfMsg
-                    // Add bot response placeholder
-                    messages = messages + ChatMessage(text = "", isUser = false)
+                    // Instead of injecting full PDF content, send a SHORT notification
+                    // The model can read the file via readWorkspaceFile when needed
+                    val notification = "PDF salvo como: $savedMdFileName — você pode ler quando quiser usando a ferramenta readWorkspaceFile"
+                    val notificationMsg = ChatMessage(text = notification, isUser = false)
+                    messages = messages + notificationMsg
+                    // Add user confirmation about what was saved
+                    val userConfirmMsg = ChatMessage(text = workspaceInfo, isUser = false)
+                    messages = messages + userConfirmMsg
+                    // Send notification to model (NOT full PDF content)
                     val startTime = System.currentTimeMillis()
-                    AppLogger.i(TAG, "PDF converted to Markdown (${markdown.length} chars), sending to model")
-                    val labeledMarkdown = "$workspaceInfo\n\nPDF ENVIADO PELO USUÁRIO:\n$markdown"
                     LlmChatModelHelper.sendMessage(
-                        message = labeledMarkdown,
+                        message = notification,
                         onToken = { token ->
                             AppLogger.d(TAG, "[PDF-RESP-TOKEN] $token")
                             mainHandler.post {
