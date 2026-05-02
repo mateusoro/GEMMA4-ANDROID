@@ -110,29 +110,37 @@ class AgentTools private constructor() : ToolSet {
     /** Lê o conteúdo de um arquivo no workspace. */
     @Tool(description = "Reads the content of a file from the workspace. Use this to read documents, markdown files, or code files.")
     fun readWorkspaceFile(
-        @ToolParam(description = "The name of the file to read (e.g., 'documento.md' or 'documento.pdf')") filename: String
+        @ToolParam(description = "The name of the file to read. May be just the filename (e.g., 'documento.md') or a path with 'markdown/' or 'documents/' prefix.") filename: String
     ): Map<String, String> {
         Log.d(TAG, "readWorkspaceFile: $filename")
         val ctx = appContext ?: return mapOf("result" to "error", "message" to "Context not initialized")
+
+        // Strip prefix if model passes full path like "markdown/document_100.md" or "documents/file.pdf"
+        val cleanName = filename
+            .removePrefix("markdown/")
+            .removePrefix("documents/")
+            .removePrefix("/")
+        val justFilename = cleanName.substringAfterLast('/')
+
         var content: String? = null
 
         val mdDir = WorkspaceManager.getMarkdownDir(ctx)
-        val mdFile = java.io.File(mdDir, filename)
+        val mdFile = java.io.File(mdDir, justFilename)
         if (mdFile.exists()) {
             content = mdFile.readText()
         }
         if (content == null) {
             val docsDir = WorkspaceManager.getDocumentsDir(ctx)
-            val docFile = java.io.File(docsDir, filename)
+            val docFile = java.io.File(docsDir, justFilename)
             if (docFile.exists()) {
-                content = "[Binary file: ${filename}]"
+                content = "[Binary file: ${justFilename}]"
             }
         }
 
         return if (content != null) {
-            mapOf("result" to "success", "filename" to filename, "content" to content)
+            mapOf("result" to "success", "filename" to justFilename, "content" to content)
         } else {
-            mapOf("result" to "error", "message" to "File not found: $filename")
+            mapOf("result" to "error", "message" to "File not found: $justFilename (tried markdown/ and documents/)")
         }
     }
 

@@ -104,26 +104,38 @@ private const val TAG = "GemmaApp"
 // System instruction for the agent — tells Gemma about its available tools
 private fun getAgentSystemInstruction(): Contents {
     val toolsDescription = """
-# Ferramentas Disponíveis
+# Você é um assistente de IA com ferramentas para interagir com o dispositivo.
 
-Você tem acesso às seguintes ferramentas:
+## Ferramentas Disponíveis
 
-## Ferramentas de Arquivo (Workspace)
-- **listWorkspace()** → lista todos os arquivos no workspace (documents e markdown)
-- **listMarkdown()** → lista apenas arquivos .md no workspace
-- **readWorkspaceFile(filename)** → lê o conteúdo de um arquivo do workspace
-- **saveMarkdownFile(filename, content)** → salva um arquivo .md no workspace
+### Arquivos (Workspace)
+- **listWorkspace()** → lista TODOS os arquivos (documents + markdown). Retorna lista formatada com [PDF] ou [MD].
+- **listMarkdown()** → lista apenas arquivos .md no workspace.
+- **readWorkspaceFile(filename)** → lê o conteúdo de um arquivo. Passe apenas o nome, ex: "documento.md" ou "relatorio.pdf". NÃO inclua "markdown/" ou "documents/" no nome — a função já procura em ambos os diretórios.
+- **saveMarkdownFile(filename, content)** → salva conteúdo .md no workspace. Ex: filename="nota.md", content="# Minha Nota..."
 
-## Ferramentas de Localização
-- **showLocationOnMap(location)** → abre o mapa com a localização especificada
-- **createCalendarEvent(datetime, title)** → cria evento no calendário
+### Localização e Calendário
+- **showLocationOnMap(location)** → abre mapa. Ex: location="São Paulo, SP"
+- **createCalendarEvent(datetime, title)** → cria evento. datetime no formato "2026-05-15T14:00:00", title="Reunião com João"
 
-## Informação do Dispositivo
-- **getDeviceInfo()** → retorna data, hora e memória disponível
+### Informações do Dispositivo
+- **getDeviceInfo()** → retorna data, hora e memória.
 
-## Como usar ferramentas
-Quando precisar usar uma ferramenta, pense em voz alta sobre qual usar e chame-a.
-O resultado será mostrado a você para que possa formular a resposta final.
+## Regras importantes
+
+1. **SEMPRE chame listWorkspace() primeiro** quando o usuário pedir para ver arquivos, ler documentos, ou qualquer coisa relacionada ao workspace.
+2. **Use readWorkspaceFile()** para ler conteúdo. Passe apenas o nome simples do arquivo, sem caminhos como "markdown/" ou "documents/". A função procura automaticamente.
+3. **Ferramentas são chamadas AUTOMATICAMENTE pelo modelo** — quando o usuário pede algo, pense qual ferramenta usar e chame-a. O modelo vai mostrar o resultado da tool call e então responder ao usuário.
+4. **O workspace fica em** app/filesDir/workspace/ com subpastas `documents/` (PDFs) e `markdown/` (arquivos .md).
+
+## Exemplo de como funciona:
+Usuário: "Liste os arquivos no workspace"
+Você deve chamar: listWorkspace()
+Resultado: lista de arquivos -> você mostra ao usuário
+
+Usuário: "Leia o arquivo documento.md"
+Você deve chamar: readWorkspaceFile("documento.md")
+Resultado: conteúdo do arquivo -> você resume ou analisa
     """.trimIndent()
 
     return Contents.of(listOf(
