@@ -1352,6 +1352,7 @@ fun ChatScreen() {
                     settings = newSettings
                     scope.launch {
                         LlmPreferences.saveSettings(context, newSettings)
+                        LlmChatModelHelper.updateParams(LlmPreferences.settingsToLlmParams(newSettings))
                     }
                 },
                 onReload = {
@@ -1546,8 +1547,8 @@ fun SettingsDialog(
                 Slider(
                     value = maxTokens,
                     onValueChange = { maxTokens = it },
-                    valueRange = 256f..8192f,
-                    steps = 30,
+                    valueRange = 512f..4096f,
+                    steps = 28,
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(modifier = Modifier.height(8.dp))
@@ -1557,7 +1558,7 @@ fun SettingsDialog(
                 Slider(
                     value = temperature,
                     onValueChange = { temperature = it },
-                    valueRange = 0.1f..2.0f,
+                    valueRange = 0.1f..1.5f,
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(modifier = Modifier.height(8.dp))
@@ -1567,8 +1568,8 @@ fun SettingsDialog(
                 Slider(
                     value = topK,
                     onValueChange = { topK = it },
-                    valueRange = 1f..100f,
-                    steps = 98,
+                    valueRange = 1f..50f,
+                    steps = 48,
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(modifier = Modifier.height(8.dp))

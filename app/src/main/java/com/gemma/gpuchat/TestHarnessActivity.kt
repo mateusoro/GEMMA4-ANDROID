@@ -529,6 +529,40 @@ class TestHarnessActivity : ComponentActivity() {
             assertTrue("has bold", result.contains("**"))
             assertFalse("no excessive newlines", result.contains("\n\n\n"))
         }
+
+        // Settings / LlmPreferences tests
+        run {
+            // Test default settings values
+            val defaults = LlmPreferences.Settings()
+            assertTrue("default maxTokens 2048", defaults.maxTokens == 2048)
+            assertTrue("default temperature 0.8f", defaults.temperature == 0.8f)
+            assertTrue("default topK 10", defaults.topK == 10)
+            assertTrue("default topP 0.95f", defaults.topP == 0.95f)
+            assertTrue("default systemPrompt not empty", defaults.systemPrompt.isNotEmpty())
+
+            // Test settingsToLlmParams mapping
+            val settings = LlmPreferences.Settings(
+                maxTokens = 1024,
+                temperature = 0.5f,
+                topK = 20,
+                topP = 0.9f
+            )
+            val params = LlmPreferences.settingsToLlmParams(settings)
+            assertTrue("maxNumTokens mapped", params.maxNumTokens == 1024)
+            assertTrue("temperature mapped", params.temperature == 0.5f)
+            assertTrue("topK mapped", params.topK == 20)
+            assertTrue("topP mapped", params.topP == 0.9f)
+
+            // Test system prompt date replacement (happens at runtime via buildSystemInstruction)
+            // Verify the placeholder exists in the raw constant
+            assertTrue("DEFAULT_SYSTEM_PROMPT has CURRENT_DATE placeholder",
+                LlmPreferences.DEFAULT_SYSTEM_PROMPT.contains("{CURRENT_DATE}"))
+            // Verify date format pattern is valid for replacement
+            val dateFormatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")
+            val now = java.time.LocalDateTime.now().format(dateFormatter)
+            assertTrue("date formatter produces yyyy-MM-dd format",
+                now.matches(Regex("""\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}""")))
+        }
     }
 
     private fun writeResultsToFile() {
