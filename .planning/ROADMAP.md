@@ -11,6 +11,16 @@
 
 **Requirements:** CHAT-01, CHAT-02, CHAT-03, TOOL-01, TOOL-02, TOOL-03, TOOL-04, TOOL-05, UIUX-01, UIUX-03
 
+**Status:** ✅ Planned (4 plans in 2 waves)
+
+**Wave 1 — Independent tasks (can run in parallel):**
+- CHAT-01: Message send/receive + history persistence
+- TOOLS-01: All 5 tool implementations
+- UI-01: Drawer navigation + build verification
+
+**Wave 2 — Depends on Wave 1:**
+- THINK-01: Thinking mode display (depends on CHAT-01)
+
 **Success Criteria:**
 1. User can send message → model responds with tool calls executed
 2. Message history persists after app restart (JSON file)
