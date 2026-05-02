@@ -7,114 +7,103 @@ requirements_addressed: [FILE-01, FILE-02, FILE-03]
 autonomous: false
 ---
 
-# Plan: PDF Processing + Workspace — Verify End-to-End Flow
+# Plan: PDF Processing + Workspace — Notification-Based Approach
 
 ## Objective
-Verify the PDF processing and workspace functionality is fully implemented and working. The core logic exists — this plan focuses on verification and any missing pieces.
+Change PDF processing to use model notification instead of content injection:
+- Old: Send full PDF markdown in user message (bloats context)
+- New: Save PDF → convert → notify model "PDF saved as X.md, read via workspace tool"
 
 ## Files Modified
-- `app/src/main/java/com/gemma/gpuchat/MainActivity.kt` (PDF picker integration)
-- `app/src/main/java/com/gemma/gpuchat/WorkspaceManager.kt` (file listing)
-- `app/src/main/java/com/gemma/gpuchat/PdfToMarkdownConverter.kt` (conversion)
+- `app/src/main/java/com/gemma/gpuchat/MainActivity.kt` (PDF result handling)
 
 ## must_haves
 - PDF file picker accepts .pdf files
-- PDF converts to markdown and is sent to model
-- Workspace browser shows documents/ and markdown/ files
+- PDF saves to documents/ and markdown is saved to markdown/
+- Model receives notification message with filename (NOT full content)
+- Workspace tools can read the saved markdown file
 
 ---
 
-## Task 1: Review PDF Picker Integration in MainActivity
+## Task 1: Review Current PDF Handling and Change to Notification
 
 <read_first>
-- `app/src/main/java/com/gemma/gpuchat/MainActivity.kt` (pdfPickerLauncher, lines 329-390)
+- `app/src/main/java/com/gemma/gpuchat/MainActivity.kt` (pdfPickerLauncher result, lines 329-390)
 </read_first>
 
 <acceptance_criteria>
-- `pdfPickerLauncher` is defined with `ActivityResultContracts.OpenDocument()`
-- MIME type filter set to `"application/pdf"`
-- On result: saves PDF via `WorkspaceManager.savePdf()` and converts via `PdfToMarkdownConverter`
-- Resulting markdown is added to chat as context or sent to model
+- PDF saved to `documents/` via `WorkspaceManager.savePdf()`
+- Markdown saved to `markdown/` via `WorkspaceManager.saveMarkdown()`
+- Model receives: "PDF salvo como {nome}.md — você pode ler quando quiser usando a ferramenta readWorkspaceFile"
+- User sees confirmation message in chat
 </acceptance_criteria>
 
 <action>
-Read the PDF picker section in MainActivity. Verify:
-1. The picker is properly configured
-2. On file selection, PDF is saved and converted
-3. Conversion result is added to chat or model context
+In MainActivity, find the PDF result handling block (around line 351).
 
-If any step is missing, add it.
+**Current code does:**
+1. Save PDF to documents/
+2. Convert to markdown
+3. Add full markdown content to user message → send to model
+
+**Change to:**
+1. Save PDF to documents/
+2. Convert to markdown
+3. Save markdown file to workspace (markdown/)
+4. Send model a SHORT notification message: "PDF salvo como {nome}.md"
+5. Show user a confirmation in chat with filename
+
+The model will use `readWorkspaceFile("nome.md")` when it needs the content.
+
+Example new flow:
+```kotlin
+// Save PDF
+val pdfPath = WorkspaceManager.savePdf(context, uri)
+
+// Convert to markdown
+val converter = PdfToMarkdownConverter(context)
+val markdown = converter.convert(pdfPath)
+
+// Save markdown to workspace
+val mdFileName = pdfFileNameWithoutExt + ".md"
+WorkspaceManager.saveMarkdown(context, mdFileName.removeSuffix(".pdf"), markdown)
+
+// Send notification to model (NOT full content)
+val notification = "PDF salvo como: $mdFileName — você pode ler quando quiser"
+sendMessageToModel(notification)
+
+// Show user confirmation
+messages = messages + ChatMessage(text = "📄 PDF convertido: $mdFileName", isUser = false)
+```
 </action>
 
 ---
 
-## Task 2: Verify PdfToMarkdownConverter Works
+## Task 2: Verify Workspace Tools Can Read Saved Files
 
 <read_first>
-- `app/src/main/java/com/gemma/gpuchat/PdfToMarkdownConverter.kt` (convert method)
+- `app/src/main/java/com/gemma/gpuchat/AgentTools.kt` (readWorkspaceFile)
+- `app/src/main/java/com/gemma/gpuchat/WorkspaceManager.kt` (saveMarkdown)
 </read_first>
 
 <acceptance_criteria>
-- `convert(pdfPath: String)` returns markdown String
-- Handles multi-page PDFs
-- Creates markdown with headings, lists, tables
-- Closes document properly in finally block
+- `readWorkspaceFile("nome.md")` returns file content
+- `WorkspaceManager.saveMarkdown()` creates file in markdown/ directory
+- Path prefix stripping works (removes "markdown/" and "documents/" from filenames)
 </acceptance_criteria>
 
 <action>
-Review the PdfToMarkdownConverter. Test with a sample PDF if possible. If issues found, fix them.
+Verify the readWorkspaceFile tool works correctly with the saved markdown files:
+1. When model calls `readWorkspaceFile("teste.md")`
+2. AgentTools strips any prefix and reads from markdown/ dir
+3. Returns file content to model
+
+Review the path stripping logic in AgentTools.readWorkspaceFile.
 </action>
 
 ---
 
-## Task 3: Verify Workspace File Browsing
-
-<read_first>
-- `app/src/main/java/com/gemma/gpuchat/WorkspaceManager.kt` (listWorkspace, listMarkdown)
-</read_first>
-
-<acceptance_criteria>
-- `listWorkspace(context)` returns formatted string with documents/ and markdown/ files
-- `listMarkdown(context)` returns only markdown files
-- Files are sorted by name
-- Empty directories show "(vazio)"
-</acceptance_criteria>
-
-<action>
-Review WorkspaceManager file listing. Verify:
-1. Both `listWorkspace` and `listMarkdown` work correctly
-2. File sizes are formatted human-readable
-3. Empty directories handled gracefully
-
-Test by creating a test markdown file and verifying it appears in list.
-</action>
-
----
-
-## Task 4: Verify Model Receives PDF Content
-
-<read_first>
-- `app/src/main/java/com/gemma/gpuchat/MainActivity.kt` (PDF result handling, around line 351)
-</read_first>
-
-<acceptance_criteria>
-- After PDF conversion, content is sent to model as context
-- Content appears in chat as user message or system context
-- Model can reference the PDF content in its response
-</acceptance_criteria>
-
-<action>
-Review the PDF result handling. Verify:
-1. After conversion, markdown is appended to a user message
-2. The message is sent to model via `LlmChatModelHelper.sendMessage()`
-3. Model receives the PDF content in its context
-
-If the flow is incomplete, complete it.
-</action>
-
----
-
-## Task 5: Build and Verify
+## Task 3: Build and Verify
 
 <read_first>
 - `app/build.gradle.kts`
@@ -123,21 +112,21 @@ If the flow is incomplete, complete it.
 <acceptance_criteria>
 - `./gradlew assembleDebug` exits with code 0
 - APK generated
-- PDF picker works on device
+- PDF selection → save → convert → notify flow works
 </acceptance_criteria>
 
 <action>
 1. Run build: `.\gradlew.bat assembleDebug`
 2. Deploy to device
-3. Test PDF selection → conversion → model context flow
+3. Test: select PDF → model receives notification (not full content) → model can read file via tool
 </action>
 
 ---
 
 ## Verification
 1. File picker opens for PDF files
-2. Selected PDF is saved to documents/ workspace
-3. PDF converts to markdown without error
-4. Markdown content appears in chat context
-5. Model responds referencing PDF content
-6. Workspace browser shows PDF and markdown files
+2. PDF saves to documents/
+3. Markdown saves to markdown/
+4. Model receives: "PDF salvo como X.md" (short message, not full content)
+5. User sees confirmation message in chat
+6. Model can read file via `readWorkspaceFile` tool when needed

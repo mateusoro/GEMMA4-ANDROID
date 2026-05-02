@@ -2,26 +2,34 @@
 
 **Gathered:** 2026-05-02
 **Status:** Ready for planning
-**Source:** Codebase analysis
+**Source:** Codebase analysis + design change
 
 <domain>
 ## Phase Boundary
 
-User can attach PDF files, convert to markdown, browse workspace. Model receives PDF content as context. Workspace file browser shows documents/ and markdown/ directories.
+User can attach PDF files, convert to markdown, browse workspace. When PDF is processed, the model is notified via a short message (not full content injection) that the PDF was saved and can be read via workspace tool.
 
-Not in scope: PDF editing, multiple PDFs, cloud sync, other file formats.
+Not in scope: PDF content injection into user messages, PDF editing, multiple PDFs.
 </domain>
 
 <decisions>
 ## Implementation Decisions
 
-### PDF Processing Flow
+### PDF Processing Flow (NEW — notification-based)
 1. User taps attach (paperclip) icon in chat UI
 2. `pdfPickerLauncher.launch(arrayOf("application/pdf"))` opens file picker
 3. On result: `WorkspaceManager.savePdf(context, uri)` saves PDF to documents/
 4. `PdfToMarkdownConverter(context).convert(pdfPath)` extracts text → markdown
-5. Markdown added to chat as user message → sent to model via `sendMessage()`
-6. Model receives PDF content in context and can reference it
+5. Markdown saved to workspace via `WorkspaceManager.saveMarkdown(context, filename, markdown)`
+6. **NEW:** Send model a SHORT notification: "PDF salvo como {filename}.md"
+7. **NEW:** User sees confirmation: "📄 PDF convertido: {filename}"
+8. Model reads file via `readWorkspaceFile` tool when needed — NOT automatically injected
+
+### Why This Approach?
+- Large PDFs can exceed context window if content is injected
+- Model can read file on-demand when it actually needs the content
+- Keeps messages short and efficient
+- Works better with long documents
 
 ### Workspace Structure
 ```
@@ -30,11 +38,24 @@ app.filesDir/workspace/
 └── markdown/      — converted .md files
 ```
 
+### Model Notification Example
+Old approach (bad for large PDFs):
+```
+User message: "Here is the PDF content: [5000 characters of markdown]..."
+```
+
+New approach (efficient):
+```
+System notification: "PDF salvo como relatorio2024.md — leia quando precisar"
+User sees: "📄 PDF convertido: relatorio2024.md"
+Model reads via tool when needed: readWorkspaceFile("relatorio2024.md")
+```
+
 ### File Tools
 - `listWorkspace()` — returns all files in both dirs
-- `listMarkdown()` — returns only .md files
-- `readWorkspaceFile()` — strips prefix, reads from correct dir
-- `saveMarkdownFile()` — saves to markdown/ dir
+- `listMarkdown()` — returns only markdown files
+- `readWorkspaceFile()` — strips prefix, reads from markdown/ dir
+- `saveMarkdownFile()` — saves to markdown/ dir (used by PDF flow)
 
 ### PdfToMarkdownConverter Features
 - Multi-page support (## Página N header)
@@ -43,11 +64,6 @@ app.filesDir/workspace/
 - List detection (-, *, 1., etc.)
 - Table detection (| separators)
 - Whitespace cleanup
-
-### AGENTS.md Learned Patterns
-- Context stored as instance field via `WorkspaceManager.init(context)` at LaunchedEffect
-- File paths use `context.filesDir` not external storage
-- `fileExists()` checks before read operations
 </decisions>
 
 <canonical_refs>
@@ -56,8 +72,9 @@ app.filesDir/workspace/
 **Downstream agents MUST read these before implementing.**
 
 - `app/src/main/java/com/gemma/gpuchat/MainActivity.kt` — pdfPickerLauncher (line 329), PDF result handling (line 351), attach button (line 1120)
-- `app/src/main/java/com/gemma/gpuchat/WorkspaceManager.kt` — all file operations, directory structure
-- `app/src/main/java/com/gemma/gpuchat/PdfToMarkdownConverter.kt` — conversion logic, markdown formatting
+- `app/src/main/java/com/gemma/gpuchat/WorkspaceManager.kt` — saveMarkdown, listWorkspace
+- `app/src/main/java/com/gemma/gpuchat/AgentTools.kt` — readWorkspaceFile (path prefix stripping)
+- `app/src/main/java/com/gemma/gpuchat/PdfToMarkdownConverter.kt` — conversion logic
 
 No external specs — requirements fully captured in decisions above.
 </canonical_refs>
@@ -67,8 +84,9 @@ No external specs — requirements fully captured in decisions above.
 
 - PDF saved to: `{context.filesDir}/workspace/documents/{filename}.pdf`
 - Markdown saved to: `{context.filesDir}/workspace/markdown/{filename}.md`
-- ListWorkspace returns formatted string with emojis: 📁 for documents, 📝 for markdown
-- PDF conversion adds "## Página N\n\n" headers between pages
+- Model notification: "PDF salvo como {nome}.md — você pode ler quando quiser"
+- User confirmation: "📄 PDF convertido: {nome}.md"
+- Filename sanitization: `baseName.replace(Regex("[^a-zA-Z0-9._-]"), "_").take(100)`
 </specifics>
 
 <deferred>
@@ -79,4 +97,5 @@ None — Phase 3 scope is fully specified.
 
 ---
 *Phase: 03-pdf-processing-workspace*
-*Context gathered: 2026-05-02 via codebase analysis*
+*Context gathered: 2026-05-02 via codebase analysis + design change*
+*Design change: notification-based instead of content injection*

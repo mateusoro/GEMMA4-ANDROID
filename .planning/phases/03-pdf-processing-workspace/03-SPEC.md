@@ -6,7 +6,7 @@
 
 ## Goal
 
-User can attach PDF files, convert them to markdown, and browse workspace files. The model receives PDF content as context.
+User can attach PDF files, convert to markdown, and browse workspace. When PDF is processed, the model is notified via a system message that the PDF was saved and can be read via the workspace tool — instead of injecting the full content into the user message.
 
 ## Background
 
@@ -14,51 +14,62 @@ User can attach PDF files, convert them to markdown, and browse workspace files.
 - `PdfToMarkdownConverter.kt` (339 lines) — full converter with heading detection, bold/italic, lists, tables
 - `WorkspaceManager.kt` (323 lines) — manages workspace directories (documents/, markdown/)
 - `MainActivity.kt` has `pdfPickerLauncher` at line 329 — triggers PDF selection
-- PDF is saved via `WorkspaceManager.savePdf()` and converted via `PdfToMarkdownConverter`
 
-**Delta to target:**
-- Currently PDF is saved and converted when user picks file (line 351-385 in MainActivity)
-- Model receives PDF content in chat as context (already implemented)
-- Workspace file browsing is implemented via `listWorkspace()` tool
-- What's missing: proper end-to-end flow verification and workspace browser UI
+**Current behavior (problematic):**
+- PDF is converted and content is injected directly into user message as "Here is the PDF content: [long text]..."
+- This can exceed context limits for large PDFs
+
+**New behavior (desired):**
+1. User selects PDF → saved to documents/
+2. Converted to markdown → saved to markdown/{filename}.md
+3. System message sent to model: "PDF saved as {filename}.md — use readWorkspaceFile tool to read it when needed"
+4. Model can read the file via its tool when it needs the content
 
 ## Requirements
 
 1. **FILE-01: File picker accepts PDF files**
-   - Current: `pdfPickerLauncher.launch(arrayOf("application/pdf"))` exists (line 1120)
    - Target: User taps attach button → file picker opens → PDF selected
    - Acceptance: File picker shows, accepts .pdf files
 
 2. **FILE-02: PDFBox converts PDF to markdown text**
-   - Current: `PdfToMarkdownConverter.convert()` produces markdown (line 351)
-   - Target: PDF text extracted, formatted as markdown, passed to model
-   - Acceptance: Model receives PDF content as context
+   - Target: PDF converted and saved to markdown/ directory
+   - Notification sent to model instead of full content injection
+   - Acceptance: Model receives notification with filename, can read via tool
 
 3. **FILE-03: Workspace browser lists available markdown files**
-   - Current: `WorkspaceManager.listWorkspace()` returns formatted list (line 167)
-   - Target: User can browse and select workspace files
-   - Acceptance: Workspace browser shows files, user can open/read them
+   - Target: User can browse workspace files
+   - Model can read markdown files via `readWorkspaceFile` tool
+   - Acceptance: Workspace list shows documents/ and markdown/ files
 
 ## Boundaries
 
 **In scope:**
 - PDF file selection and conversion flow
-- Model context with PDF content
-- Workspace file listing and reading
+- Model notification (not content injection)
+- Workspace file listing and reading via tools
 
 **Out of scope:**
+- PDF content injection into user messages
 - PDF editing or annotation
 - Multiple PDF handling
-- Cloud sync
-- Other file formats (DOC, TXT, etc.)
+
+## Key Change from Original Plan
+
+**Old approach:** Inject full PDF markdown into user message → bloats context
+**New approach:**
+1. Save PDF → convert → save markdown to workspace
+2. Send model a notification: "PDF saved as {name}.md — read it via workspace when needed"
+3. Model uses `readWorkspaceFile` tool to access content
+
+This keeps messages short and lets model read content on-demand.
 
 ## Acceptance Criteria
 
 - [ ] File picker accepts PDF files
-- [ ] PDF converts to markdown without crash
-- [ ] Model receives PDF content as context
-- [ ] Workspace list shows documents/ and markdown/ files
-- [ ] User can read markdown files from workspace
+- [ ] PDF saves to documents/ and converts to markdown in markdown/
+- [ ] Model receives notification message (not full content)
+- [ ] Model can read markdown file via `readWorkspaceFile` tool
+- [ ] Workspace browser shows documents/ and markdown/ files
 
 ## Ambiguity Report
 
@@ -73,3 +84,4 @@ User can attach PDF files, convert them to markdown, and browse workspace files.
 ---
 *Phase: 03-pdf-processing-workspace*
 *Spec created: 2026-05-02*
+*Updated: 2026-05-02 — model notification instead of content injection*
