@@ -41,6 +41,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.List
@@ -288,8 +289,104 @@ fun ChatScreen() {
         }
     }
 
-    // Handler for UI thread updates from background callbacks
+    // Handler for UI thread updates from background callbacks - must be before pdfPickerLauncher
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
+
+    val pdfPickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        AppLogger.i(TAG, "PDF selected: $uri")
+        if (uri != null) {
+            // Add loading message
+            val loadingMsg = ChatMessage(text = "📄 Processando PDF...", isUser = false)
+            messages = messages + loadingMsg
+
+            // Convert PDF to markdown in IO thread
+            scope.launch {
+                try {
+                    val markdown = withContext(Dispatchers.IO) {
+                        val converter = PdfToMarkdownConverter(context)
+                        val inputStream = context.contentResolver.openInputStream(uri)
+                        val result = if (inputStream != null) {
+                            converter.convert(inputStream)
+                        } else {
+                            "Erro: não foi possível abrir o PDF"
+                        }
+                        inputStream?.close()
+                        result
+                    }
+                    // Remove loading message
+                    messages = messages.filter { !it.text.startsWith("📄 Processando") }
+                    // Add PDF content as user message
+                    val pdfMsg = ChatMessage(text = markdown, isUser = true)
+                    messages = messages + pdfMsg
+                    // Add bot response placeholder
+                    messages = messages + ChatMessage(text = "", isUser = false)
+                    val startTime = System.currentTimeMillis()
+                    AppLogger.i(TAG, "PDF converted to Markdown (${markdown.length} chars), sending to model")
+                    LlmChatModelHelper.sendMessage(
+                        message = markdown,
+                        onToken = { token ->
+                            AppLogger.d(TAG, "[PDF-RESP-TOKEN] $token")
+                            mainHandler.post {
+                                val lastBot = messages.indexOfLast { !it.isUser }
+                                if (lastBot >= 0) {
+                                    messages = messages.mapIndexed { idx, msg ->
+                                        if (idx == lastBot) msg.copy(text = msg.text + token) else msg
+                                    }
+                                }
+                            }
+                        },
+                        onDone = {
+                            AppLogger.i(TAG, "[PDF-RESP-DONE]")
+                            mainHandler.post {
+                                val lastBot = messages.indexOfLast { !it.isUser }
+                                if (lastBot >= 0) {
+                                    val text = messages[lastBot].text
+                                    val duration = System.currentTimeMillis() - startTime
+                                    val tp = if (duration > 0) text.length * 1000f / duration else 0f
+                                    throughput = tp
+                                    messages = messages.mapIndexed { idx, msg ->
+                                        if (idx == lastBot) msg.copy(throughput = tp, tokenCount = text.length, durationMs = duration) else msg
+                                    }
+                                }
+                                memoryInfo = LlmChatModelHelper.getMemoryUsage()
+                                systemMemoryInfo = LlmChatModelHelper.getSystemMemory(context)
+                                currentConversationId?.let { convId ->
+                                    scope.launch {
+                                        val conv = Conversation(
+                                            id = convId,
+                                            title = messages.firstOrNull { it.isUser }?.text?.take(30) ?: "PDF",
+                                            messages = messages.toList(),
+                                            createdAt = System.currentTimeMillis(),
+                                            updatedAt = System.currentTimeMillis()
+                                        )
+                                        ChatHistoryManager.saveConversation(context, conv)
+                                    }
+                                }
+                            }
+                        },
+                        onError = { error ->
+                            AppLogger.e(TAG, "PDF model error: ${error.message}", error)
+                            mainHandler.post {
+                                messages = messages.filter { !it.text.startsWith("📄 Processando") }
+                                val lastBot = messages.indexOfLast { !it.isUser }
+                                if (lastBot >= 0) {
+                                    messages = messages.mapIndexed { idx, msg ->
+                                        if (idx == lastBot) msg.copy(text = "Erro PDF: ${error.message}") else msg
+                                    }
+                                }
+                            }
+                        }
+                    )
+                } catch (e: Exception) {
+                    AppLogger.e(TAG, "PDF conversion error: ${e.message}", e)
+                    messages = messages.filter { !it.text.startsWith("📄 Processando") }
+                    messages = messages + ChatMessage(text = "Erro ao processar PDF: ${e.message}", isUser = false)
+                }
+            }
+        }
+    }
 
     // Load saved settings
     LaunchedEffect(Unit) {
@@ -946,6 +1043,25 @@ fun ChatScreen() {
                             imageVector = if (isRecording) Icons.Filled.Stop else Icons.Filled.Mic,
                             contentDescription = if (isRecording) "Stop recording" else "Record voice",
                             tint = if (isRecording) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    IconButton(
+                        onClick = {
+                            AppLogger.i(TAG, "PDF ATTACH button clicked")
+                            // Launch document picker for PDF files
+                            val intent = android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT).apply {
+                                addCategory(android.content.Intent.CATEGORY_OPENABLE)
+                                type = "application/pdf"
+                            }
+                            pdfPickerLauncher.launch(arrayOf("application/pdf"))
+                        },
+                        enabled = isModelReady
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.AttachFile,
+                            contentDescription = "Attach PDF",
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(24.dp)
                         )
                     }
