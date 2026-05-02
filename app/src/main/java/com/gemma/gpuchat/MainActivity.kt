@@ -88,6 +88,8 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.gemma.gpuchat.WorkspaceManager
+import com.gemma.gpuchat.AgentTools
+import com.google.ai.edge.litertlm.tool
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -506,10 +508,14 @@ fun ChatScreen() {
             initStage = "Carregando modelo..."
             initProgress = 0.1f
 
+            // Create AgentTools (once, outside IO thread)
+            val agentTools = listOf(tool(AgentTools.create()))
+            AppLogger.d(TAG, "AgentTools created: ${agentTools.size} ToolProviders")
+
             // Run initialization on IO thread with UI-safe callbacks
             val params = LlmPreferences.settingsToLlmParams(settings)
             withContext(Dispatchers.IO) {
-                LlmChatModelHelper.initialize(context, modelPath, params) { stage, progress ->
+                LlmChatModelHelper.initialize(context, modelPath, params, agentTools) { stage, progress ->
                     // Post to main thread for Compose recomposition
                     mainHandler.post {
                         initStage = stage
