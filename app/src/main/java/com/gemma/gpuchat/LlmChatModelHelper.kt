@@ -39,6 +39,7 @@ object LlmChatModelHelper {
     private var currentModelPath: String = ""
     private var currentContext: Context? = null
     private var currentTools: List<ToolProvider> = emptyList()
+    private var currentSystemInstruction: Contents? = null
 
     fun getParams(): LlmParams = currentParams
 
@@ -93,16 +94,19 @@ object LlmChatModelHelper {
         modelPath: String,
         params: LlmParams = LlmParams(),
         tools: List<ToolProvider> = emptyList(),
+        systemInstruction: Contents? = null,
         onProgress: (String, Int) -> Unit = { _, _ -> }
     ) {
         currentParams = params
         currentModelPath = modelPath
         currentContext = context
         currentTools = tools
+        currentSystemInstruction = systemInstruction
         AppLogger.d(TAG, ">>> initialize() CALLED <<<")
         AppLogger.d(TAG, "modelPath: $modelPath")
         AppLogger.d(TAG, "params: maxTokens=${params.maxNumTokens}, temp=${params.temperature}, topK=${params.topK}, topP=${params.topP}")
         AppLogger.d(TAG, "tools: ${tools.size} ToolProviders")
+        AppLogger.d(TAG, "systemInstruction: ${if (systemInstruction != null) "provided" else "null"}")
         AppLogger.d(TAG, "filesDir: ${context.filesDir}")
 
         onProgress("Procurando modelo...", 0)
@@ -209,7 +213,7 @@ object LlmChatModelHelper {
             topP = currentParams.topP.toDouble(),
             temperature = currentParams.temperature.toDouble()
         )
-        val convConfig = ConversationConfig(samplerConfig = samplerConfig, tools = currentTools)
+        val convConfig = ConversationConfig(samplerConfig = samplerConfig, tools = currentTools, systemInstruction = currentSystemInstruction)
         conversation = engine!!.createConversation(convConfig)
         AppLogger.d(TAG, "Conversation created: $conversation with sampler topK=${currentParams.topK}, topP=${currentParams.topP}, temp=${currentParams.temperature}")
         AppLogger.d(TAG, "[PROGRESS] Conversa pronta! (90%)")
@@ -225,7 +229,7 @@ object LlmChatModelHelper {
             topP = currentParams.topP.toDouble(),
             temperature = currentParams.temperature.toDouble()
         )
-        val convConfig = ConversationConfig(samplerConfig = samplerConfig, tools = currentTools)
+        val convConfig = ConversationConfig(samplerConfig = samplerConfig, tools = currentTools, systemInstruction = currentSystemInstruction)
         return engine!!.createConversation(convConfig)
     }
 
@@ -424,9 +428,10 @@ AppLogger.d(TAG, "Sending audio as WAV ${wrapAudioInWav(audioBytes).size} bytes 
         val ctx = currentContext ?: throw IllegalStateException("No context set - call initialize first")
         val path = currentModelPath
         val tools = currentTools
+        val sysInstr = currentSystemInstruction
         release()
         currentParams = params
-        initialize(ctx, path, params, tools, onProgress)
+        initialize(ctx, path, params, tools, sysInstr, onProgress)
     }
 
     fun isInitialized(): Boolean = engine != null && conversation != null

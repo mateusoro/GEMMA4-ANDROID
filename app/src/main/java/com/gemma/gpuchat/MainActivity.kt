@@ -89,6 +89,8 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.gemma.gpuchat.WorkspaceManager
 import com.gemma.gpuchat.AgentTools
+import com.google.ai.edge.litertlm.Contents
+import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.tool
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -98,6 +100,37 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 private const val TAG = "GemmaApp"
+
+// System instruction for the agent — tells Gemma about its available tools
+private fun getAgentSystemInstruction(): Contents {
+    val toolsDescription = """
+# Ferramentas Disponíveis
+
+Você tem acesso às seguintes ferramentas:
+
+## Ferramentas de Arquivo (Workspace)
+- **listWorkspace()** → lista todos os arquivos no workspace (documents e markdown)
+- **listMarkdown()** → lista apenas arquivos .md no workspace
+- **readWorkspaceFile(filename)** → lê o conteúdo de um arquivo do workspace
+- **saveMarkdownFile(filename, content)** → salva um arquivo .md no workspace
+
+## Ferramentas de Localização
+- **showLocationOnMap(location)** → abre o mapa com a localização especificada
+- **createCalendarEvent(datetime, title)** → cria evento no calendário
+
+## Informação do Dispositivo
+- **getDeviceInfo()** → retorna data, hora e memória disponível
+
+## Como usar ferramentas
+Quando precisar usar uma ferramenta, pense em voz alta sobre qual usar e chame-a.
+O resultado será mostrado a você para que possa formular a resposta final.
+    """.trimIndent()
+
+    return Contents.of(listOf(
+        Content.Text(toolsDescription),
+        Content.Text("Data atual: ${java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))}")
+    ))
+}
 
 class MainActivity : ComponentActivity() {
 
@@ -510,12 +543,13 @@ fun ChatScreen() {
 
             // Create AgentTools (once, outside IO thread)
             val agentTools = listOf(tool(AgentTools.create(context)))
+            val sysInstruction = getAgentSystemInstruction()
             AppLogger.d(TAG, "AgentTools created: ${agentTools.size} ToolProviders")
 
             // Run initialization on IO thread with UI-safe callbacks
             val params = LlmPreferences.settingsToLlmParams(settings)
             withContext(Dispatchers.IO) {
-                LlmChatModelHelper.initialize(context, modelPath, params, agentTools) { stage, progress ->
+                LlmChatModelHelper.initialize(context, modelPath, params, agentTools, sysInstruction) { stage, progress ->
                     // Post to main thread for Compose recomposition
                     mainHandler.post {
                         initStage = stage
