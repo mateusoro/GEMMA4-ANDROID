@@ -1,0 +1,21 @@
+[
+  {
+    "id": "proc_2026-05-02T1202_74a367",
+    "workspaceId": "mongev3n",
+    "title": "Gradle build",
+    "command": "$env:JAVA_HOME=\"C:\\Program Files\\Java\\jdk-24\"; ./gradlew assembleDebug 2>&1",
+    "cwd": "C:\\Users\\Administrador\\OneDrive\\Área de Trabalho\\Mateus\\Desenvolvimento\\CODEX DESKTOP\\GEMMA4 ANDROID",
+    "status": "error",
+    "pid": 37016,
+    "startedAt": "2026-05-02T12:02:23.323Z",
+    "outputSizeBytes": 94,
+    "notify": {
+      "sessionID": "ses_2205351e5ffewvGEydH6WxU7oO",
+      "directory": "C:\\Users\\Administrador\\OneDrive\\Área de Trabalho\\Mateus\\Desenvolvimento\\CODEX DESKTOP\\GEMMA4 ANDROID",
+      "sentAt": "2026-05-02T12:02:23.748Z"
+    },
+    "terminalReason": "failed",
+    "exitCode": 1,
+    "stoppedAt": "2026-05-02T12:02:23.645Z"
+  }
+]
