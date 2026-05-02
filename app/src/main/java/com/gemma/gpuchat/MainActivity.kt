@@ -590,10 +590,10 @@ fun ChatScreen() {
         return msgs.indexOfLast { !it.isUser }
     }
 
-    // Auto-test: send "oi" when model is ready to test thinking mode
+    // Auto-test: send "oi" — system prompt is now prepended to user message via LlmChatModelHelper.sendMessage workaround (ConversationConfig.systemInstruction is ignored by Gemma-4-E2B-IT)
     LaunchedEffect(isModelReady, autoMessageState) {
         if (isModelReady && autoMessageState == 1) {
-            AppLogger.i(TAG, "[AUTO] Sending 'oi' to test thinking mode...")
+            AppLogger.i(TAG, "[AUTO] Sending 'oi' (systemPrompt prepended to message as workaround)")
             val userMsg = ChatMessage(text = "oi", isUser = true)
             messages = messages + userMsg
             val botMsg = ChatMessage(text = "", isUser = false)
@@ -1359,7 +1359,8 @@ fun ChatScreen() {
                     isInitializing = true
                     scope.launch {
                         val params = LlmPreferences.settingsToLlmParams(settings)
-                        LlmChatModelHelper.reload(params) { stage, progress ->
+                        val sysInstr = buildSystemInstruction(settings.systemPrompt)
+                        LlmChatModelHelper.reload(params, sysInstr) { stage, progress ->
                             mainHandler.post {
                                 initStage = stage
                                 initProgress = progress / 100f

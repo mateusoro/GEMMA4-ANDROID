@@ -115,6 +115,7 @@ object LlmChatModelHelper {
         AppLogger.d(TAG, "tools: ${tools.size} ToolProviders")
         AppLogger.d(TAG, "extraContext: $extraContext")
         AppLogger.d(TAG, "channels: ${channels?.size ?: 0} Channel(s)")
+        AppLogger.d(TAG, "systemInstruction: ${systemInstruction?.toString()?.take(200) ?: "NULL"}")
         AppLogger.d(TAG, "filesDir: ${context.filesDir}")
 
         onProgress("Procurando modelo...", 0)
@@ -221,7 +222,13 @@ object LlmChatModelHelper {
             topP = currentParams.topP.toDouble(),
             temperature = currentParams.temperature.toDouble()
         )
-        val convConfig = ConversationConfig(samplerConfig = samplerConfig, tools = currentTools, systemInstruction = currentSystemInstruction, channels = currentChannels, extraContext = currentExtraContext ?: emptyMap())
+        val convConfig = ConversationConfig(
+            samplerConfig = samplerConfig,
+            tools = currentTools,
+            systemInstruction = currentSystemInstruction,
+            channels = currentChannels,
+            extraContext = currentExtraContext ?: emptyMap()
+        )
         conversation = engine!!.createConversation(convConfig)
         AppLogger.d(TAG, "Conversation created: $conversation with sampler topK=${currentParams.topK}, topP=${currentParams.topP}, temp=${currentParams.temperature}")
         AppLogger.d(TAG, "[PROGRESS] Conversa pronta! (90%)")
@@ -237,7 +244,13 @@ object LlmChatModelHelper {
             topP = currentParams.topP.toDouble(),
             temperature = currentParams.temperature.toDouble()
         )
-        val convConfig = ConversationConfig(samplerConfig = samplerConfig, tools = currentTools, systemInstruction = currentSystemInstruction, channels = currentChannels, extraContext = currentExtraContext ?: emptyMap())
+        val convConfig = ConversationConfig(
+            samplerConfig = samplerConfig,
+            tools = currentTools,
+            systemInstruction = currentSystemInstruction,
+            channels = currentChannels,
+            extraContext = currentExtraContext ?: emptyMap()
+        )
         return engine!!.createConversation(convConfig)
     }
 
@@ -254,14 +267,24 @@ object LlmChatModelHelper {
         onError: (Throwable) -> Unit
     ) {
         AppLogger.d(TAG, ">>> sendMessage() CALLED <<<")
-        AppLogger.d(TAG, "message: $message")
-        AppLogger.d(TAG, "conversation: $conversation")
 
         if (conversation == null) {
             AppLogger.e(TAG, "conversation is NULL!")
             onError(IllegalStateException("Conversation not initialized"))
             return
         }
+
+        // WORKAROUND: ConversationConfig.systemInstruction is ignored by Gemma-4-E2B-IT.
+        // Prepend system instruction to every user message so the model actually sees it.
+        // currentSystemInstruction.toString() gives the plain text of the prompt.
+        val sysInstrText = currentSystemInstruction?.toString() ?: ""
+        val fullMessage = if (sysInstrText.isNotEmpty()) {
+            "$sysInstrText\n\nUser: $message"
+        } else {
+            message
+        }
+        AppLogger.d(TAG, "message: $message")
+        AppLogger.d(TAG, "fullMessage (with sysInstr): ${fullMessage.take(100)}...")
 
         val callback = object : MessageCallback {
             private var done = false
@@ -313,7 +336,7 @@ object LlmChatModelHelper {
 
         AppLogger.d(TAG, "Calling conversation.sendMessageAsync()...")
         conversation?.sendMessageAsync(
-            Contents.of(message),
+            Contents.of(fullMessage),
             callback
         )
         AppLogger.d(TAG, "sendMessageAsync() returned (async)")
@@ -438,12 +461,12 @@ AppLogger.d(TAG, "Sending audio as WAV ${wrapAudioInWav(audioBytes).size} bytes 
         }
     }
 
-    fun reload(params: LlmParams, onProgress: (String, Int) -> Unit = { _, _ -> }) {
+    fun reload(params: LlmParams, systemInstruction: Contents? = null, onProgress: (String, Int) -> Unit = { _, _ -> }) {
         AppLogger.d(TAG, ">>> reload() CALLED <<<")
         val ctx = currentContext ?: throw IllegalStateException("No context set - call initialize first")
         val path = currentModelPath
         val tools = currentTools
-        val sysInstr = currentSystemInstruction
+        val sysInstr = systemInstruction ?: currentSystemInstruction
         val ch = currentChannels
         val extra = currentExtraContext
         release()
