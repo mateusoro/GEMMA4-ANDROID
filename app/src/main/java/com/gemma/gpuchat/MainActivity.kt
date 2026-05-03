@@ -197,6 +197,7 @@ fun ChatScreen() {
     var audioRecord: AudioRecord? by remember { mutableStateOf(null) }
     var recordingJob: kotlinx.coroutines.Job? by remember { mutableStateOf(null) }
     var isRecording by remember { mutableStateOf(false) }
+    var isResponding by remember { mutableStateOf(false) }
     val audioBuffer = mutableListOf<Byte>()
 
     fun startRecordingAudio() {
@@ -390,6 +391,7 @@ fun ChatScreen() {
                     val userConfirmMsg = ChatMessage(text = workspaceInfo, isUser = false)
                     messages = messages + userConfirmMsg
                     // Send notification to model (NOT full PDF content)
+                    isResponding = true
                     val startTime = System.currentTimeMillis()
                     LlmChatModelHelper.sendMessage(
                         message = notification,
@@ -407,6 +409,7 @@ fun ChatScreen() {
                         onDone = {
                             AppLogger.i(TAG, "[PDF-RESP-DONE]")
                             mainHandler.post {
+                                isResponding = false
                                 val lastBot = messages.indexOfLast { !it.isUser }
                                 if (lastBot >= 0) {
                                     val text = messages[lastBot].text
@@ -436,6 +439,7 @@ fun ChatScreen() {
                         onError = { error ->
                             AppLogger.e(TAG, "PDF model error: ${error.message}", error)
                             mainHandler.post {
+                                isResponding = false
                                 messages = messages.filter { !it.text.startsWith("📄 Processando") }
                                 val lastBot = messages.indexOfLast { !it.isUser }
                                 if (lastBot >= 0) {
@@ -988,7 +992,7 @@ fun ChatScreen() {
                         onValueChange = { inputText = it },
                         modifier = Modifier.weight(1f),
                         placeholder = { Text("Type a message...") },
-                        enabled = isModelReady,
+                        enabled = isModelReady && !isResponding,
                         singleLine = true,
                         shape = RoundedCornerShape(24.dp)
                     )
@@ -1029,6 +1033,7 @@ fun ChatScreen() {
                                                 messages = messages + ChatMessage(text = "", isUser = false)
                                                 val textStartTime = System.currentTimeMillis()
                                                 AppLogger.i(TAG, "Transcription added as user msg: '$transcription', sending to chat model...")
+                                                isResponding = true
                                                 LlmChatModelHelper.sendMessage(
                                                     message = transcription,
                                                     onToken = { token ->
@@ -1045,6 +1050,7 @@ fun ChatScreen() {
                                                     onDone = {
                                                         AppLogger.i(TAG, "[AUDIO-RESP-DONE]")
                                                         mainHandler.post {
+                                                            isResponding = false
                                                             memoryInfo = LlmChatModelHelper.getMemoryUsage()
                                                             systemMemoryInfo = LlmChatModelHelper.getSystemMemory(context)
                                                             val lastBot = messages.indexOfLast { !it.isUser }
@@ -1074,6 +1080,7 @@ fun ChatScreen() {
                                                     onError = { error ->
                                                         AppLogger.e(TAG, "Audio model response error: ${error.message}", error)
                                                         mainHandler.post {
+                                                            isResponding = false
                                                             val lastBot = messages.indexOfLast { !it.isUser }
                                                             if (lastBot >= 0) {
                                                                 messages = messages.mapIndexed { idx, msg ->
@@ -1109,7 +1116,7 @@ fun ChatScreen() {
                                 }
                             }
                         },
-                        enabled = isModelReady
+                        enabled = isModelReady && !isResponding
                     ) {
                         Icon(
                             imageVector = if (isRecording) Icons.Filled.Stop else Icons.Filled.Mic,
@@ -1128,7 +1135,7 @@ fun ChatScreen() {
                             }
                             pdfPickerLauncher.launch(arrayOf("application/pdf"))
                         },
-                        enabled = isModelReady
+                        enabled = isModelReady && !isResponding
                     ) {
                         Icon(
                             imageVector = Icons.Filled.AttachFile,
@@ -1173,6 +1180,7 @@ fun ChatScreen() {
                             }
 
                             // Normal text message
+                            isResponding = true
                             inputText = ""
                             messages = messages + ChatMessage(text = text, isUser = true)
                             val startTime = System.currentTimeMillis()
@@ -1184,6 +1192,7 @@ fun ChatScreen() {
                                     if (lastBotIdx >= 0) messages = messages.mapIndexed { idx, msg -> if (idx == lastBotIdx) msg.copy(text = msg.text + token) else msg }
                                 } },
                                 onDone = { mainHandler.post {
+                                    isResponding = false
                                     val lastBotIdx = messages.indexOfLast { !it.isUser }
                                     if (lastBotIdx >= 0) {
                                         val tokenCount = messages[lastBotIdx].text.length
@@ -1202,12 +1211,13 @@ fun ChatScreen() {
                                     }
                                 } },
                                 onError = { error -> mainHandler.post {
+                                    isResponding = false
                                     val lastBotIdx = messages.indexOfLast { !it.isUser }
                                     if (lastBotIdx >= 0) messages = messages.mapIndexed { idx, msg -> if (idx == lastBotIdx) msg.copy(text = "Erro: ${error.message}") else msg }
                                 } }
                             )
                         },
-                        enabled = isModelReady && inputText.isNotBlank()
+                        enabled = isModelReady && inputText.isNotBlank() && !isResponding
                     ) {
                         Text("Send")
                     }
@@ -1285,6 +1295,7 @@ fun ChatScreen() {
             val userMessage = ChatMessage(text = userMessageText, isUser = true)
             messages = messages + userMessage
 
+            isResponding = true
             val startTime = System.currentTimeMillis()
             messages = messages + ChatMessage(text = "", isUser = false)
 
@@ -1308,6 +1319,7 @@ fun ChatScreen() {
                 onDone = {
                     AppLogger.i(TAG, "onDone callback fired")
                     mainHandler.post {
+                        isResponding = false
                         AppLogger.i(TAG, "onDone mainHandler.post running")
                         memoryInfo = LlmChatModelHelper.getMemoryUsage()
                         systemMemoryInfo = LlmChatModelHelper.getSystemMemory(context)
@@ -1343,6 +1355,7 @@ fun ChatScreen() {
                 },
                 onError = { error ->
                     AppLogger.e(TAG, "Error: ${error.message}", error)
+                    mainHandler.post { isResponding = false }
                     scope.launch {
                         snackbarHostState.showSnackbar("Error: ${error.message}")
                     }
