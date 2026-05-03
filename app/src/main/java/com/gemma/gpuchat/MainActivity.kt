@@ -33,7 +33,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -133,6 +135,7 @@ class MainActivity : ComponentActivity() {
             android.util.Log.e(TAG, "Logger init failed", e)
         }
         enableEdgeToEdge()
+        window.isNavigationBarContrastEnforced = false
         setContent {
             MaterialTheme {
                 ChatScreen()
@@ -691,7 +694,10 @@ fun ChatScreen() {
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
-            ModalDrawerSheet(modifier = Modifier.width(300.dp)) {
+            ModalDrawerSheet(
+                modifier = Modifier.width(300.dp),
+                windowInsets = WindowInsets.safeDrawing
+            ) {
                 // Drawer header
                 Box(
                     modifier = Modifier

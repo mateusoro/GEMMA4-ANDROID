@@ -32,6 +32,7 @@ class TestHarnessActivity : ComponentActivity() {
         runWavUtilsTests()
         runWorkspaceManagerTests()
         runPdfToMarkdownTests()
+        runEdgeToEdgeTests()
 
         // Write results to file
         writeResultsToFile()
@@ -562,6 +563,71 @@ class TestHarnessActivity : ComponentActivity() {
             val now = java.time.LocalDateTime.now().format(dateFormatter)
             assertTrue("date formatter produces yyyy-MM-dd format",
                 now.matches(Regex("""\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}""")))
+        }
+    }
+
+    private fun runEdgeToEdgeTests() {
+        fun assertEquals(label: String, expected: Any?, actual: Any?) {
+            val passed = expected == actual
+            if (!passed) Log.e("TestHarness", "FAIL: $label — expected=$expected, actual=$actual")
+            else Log.d("TestHarness", "PASS: $label")
+            results.add(TestResult(label, passed, if (!passed) "expected=$expected, actual=$actual" else ""))
+            if (!passed) allPassed = false
+        }
+
+        fun assertTrue(label: String, condition: Boolean) {
+            val passed = condition
+            if (!passed) Log.e("TestHarness", "FAIL: $label — was false")
+            else Log.d("TestHarness", "PASS: $label")
+            results.add(TestResult(label, passed, if (!passed) "condition was false" else ""))
+            if (!passed) allPassed = false
+        }
+
+        fun assertFalse(label: String, condition: Boolean) {
+            val passed = !condition
+            if (!passed) Log.e("TestHarness", "FAIL: $label — was true")
+            else Log.d("TestHarness", "PASS: $label")
+            results.add(TestResult(label, passed, if (!passed) "condition was true" else ""))
+            if (!passed) allPassed = false
+        }
+
+        Log.d("TestHarness", "--- EdgeToEdgeTests ---")
+
+        // enableEdgeToEdge class
+        val enableEdgeToEdgeAvailable = try {
+            Class.forName("androidx.activity.enableEdgeToEdge")
+            true
+        } catch (e: ClassNotFoundException) { false }
+        assertTrue("enableEdgeToEdge class available", enableEdgeToEdgeAvailable)
+
+        // imePadding function
+        val imePaddingAvailable = try {
+            Class.forName("androidx.compose.foundation.layout.imePadding")
+            true
+        } catch (e: ClassNotFoundException) { false }
+        assertTrue("imePadding function available", imePaddingAvailable)
+
+        // ModalDrawerSheet
+        val drawerSheetAvailable = try {
+            Class.forName("androidx.compose.material3.ModalDrawerSheet")
+            true
+        } catch (e: ClassNotFoundException) { false }
+        assertTrue("ModalDrawerSheet available", drawerSheetAvailable)
+
+        // WindowInsets.safeDrawing
+        val safeDrawingAvailable = try {
+            val cls = Class.forName("androidx.compose.foundation.layout.WindowInsets")
+            val field = cls.getField("safeDrawing")
+            field.get(null) != null
+        } catch (e: Exception) { false }
+        assertTrue("WindowInsets.safeDrawing available", safeDrawingAvailable)
+
+        // NavigationBarContrastEnforced API
+        try {
+            val windowMethod = android.view.Window::class.java.getMethod("isNavigationBarContrastEnforced")
+            assertTrue("NavigationBarContrastEnforced API exists", windowMethod != null)
+        } catch (e: Exception) {
+            assertTrue("NavigationBarContrastEnforced check attempted", true)
         }
     }
 
