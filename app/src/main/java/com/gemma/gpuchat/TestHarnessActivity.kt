@@ -630,6 +630,10 @@ class TestHarnessActivity : ComponentActivity() {
 
         Log.d("TestHarness", "--- AgentToolsTests ---")
 
+        // Copy test assets from APK assets to device workspace before running tests
+        copyAssetToWorkspace("test_markdown.md", "markdown")
+        copyAssetToWorkspace("test_document.pdf", "documents")
+
         // Test: AgentTools.create() returns non-null instance
         val tools = AgentTools.create(this)
         assertTrue("AgentTools.create() returns non-null", tools != null)
@@ -669,18 +673,18 @@ class TestHarnessActivity : ComponentActivity() {
         assertTrue("app_memory_mb format is 'used/total'",
             appMem.matches(Regex("""\d+/\d+""")))
 
-        // Test: readWorkspaceFile strips "markdown/" prefix — use real filename from device
-        val stripMdResult = tools.readWorkspaceFile("markdown/document_1000263473.md")
-        // Should look for "document_1000263473.md" in markdown dir — returns success or "file not found", not crash
+        // Test: readWorkspaceFile strips "markdown/" prefix — use asset filename
+        val stripMdResult = tools.readWorkspaceFile("markdown/test_markdown.md")
+        // Should look for "test_markdown.md" in markdown dir — returns success or "file not found", not crash
         assertEquals("readWorkspaceFile strips markdown/ prefix", "success", stripMdResult["result"] ?: "error")
 
-        // Test: readWorkspaceFile strips "documents/" prefix — use real PDF filename from device
-        val stripDocsResult = tools.readWorkspaceFile("documents/33.619.606 GERSON MOLOSSI.pdf")
-        // Should look for "33.619.606 GERSON MOLOSSI.pdf" in documents dir — returns "[Binary file: ...]" on success
+        // Test: readWorkspaceFile strips "documents/" prefix — use asset PDF filename
+        val stripDocsResult = tools.readWorkspaceFile("documents/test_document.pdf")
+        // Should look for "test_document.pdf" in documents dir — returns "[Binary file: ...]" on success
         assertEquals("readWorkspaceFile strips documents/ prefix", "success", stripDocsResult["result"] ?: "error")
 
         // Test: readWorkspaceFile handles path with leading slash
-        val stripSlashResult = tools.readWorkspaceFile("/markdown/document_1000263473.md")
+        val stripSlashResult = tools.readWorkspaceFile("/markdown/test_markdown.md")
         assertEquals("readWorkspaceFile strips leading /", "success", stripSlashResult["result"] ?: "error")
 
         // Test: readWorkspaceFile returns error for non-existent file
@@ -782,6 +786,26 @@ class TestHarnessActivity : ComponentActivity() {
             assertTrue("NavigationBarContrastEnforced API exists", windowMethod != null)
         } catch (e: Exception) {
             assertTrue("NavigationBarContrastEnforced check attempted", true)
+        }
+    }
+
+    /**
+     * Copies a file from APK assets to the device workspace directory.
+     * Must be called before AgentTools tests run (since the tests read from workspace).
+     */
+    private fun copyAssetToWorkspace(assetName: String, subDir: String) {
+        try {
+            val workspaceDir = File(filesDir, "workspace/$subDir")
+            workspaceDir.mkdirs()
+            val destFile = File(workspaceDir, assetName)
+            assets.open(assetName).use { input ->
+                destFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+            Log.d("TestHarness", "Copied asset: $assetName -> ${destFile.absolutePath}")
+        } catch (e: Exception) {
+            Log.e("TestHarness", "Failed to copy asset $assetName: ${e.message}")
         }
     }
 
