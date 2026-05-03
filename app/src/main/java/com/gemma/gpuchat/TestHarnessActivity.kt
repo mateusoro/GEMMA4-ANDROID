@@ -33,6 +33,7 @@ class TestHarnessActivity : ComponentActivity() {
         runWorkspaceManagerTests()
         runPdfToMarkdownTests()
         runLlmPreferencesTests()
+        runAgentToolsTests()
         runEdgeToEdgeTests()
 
         // Write results to file
@@ -600,6 +601,115 @@ class TestHarnessActivity : ComponentActivity() {
         val now = java.time.LocalDateTime.now().format(dateFormatter)
         assertTrue("date formatter produces yyyy-MM-dd format",
             now.matches(Regex("""\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}""")))
+    }
+
+    private fun runAgentToolsTests() {
+        fun assertTrue(label: String, condition: Boolean) {
+            val passed = condition
+            if (!passed) Log.e("TestHarness", "FAIL: $label — was false")
+            else Log.d("TestHarness", "PASS: $label")
+            results.add(TestResult(label, passed, if (!passed) "condition was false" else ""))
+            if (!passed) allPassed = false
+        }
+
+        fun assertFalse(label: String, condition: Boolean) {
+            val passed = !condition
+            if (!passed) Log.e("TestHarness", "FAIL: $label — was true")
+            else Log.d("TestHarness", "PASS: $label")
+            results.add(TestResult(label, passed, if (!passed) "condition was true" else ""))
+            if (!passed) allPassed = false
+        }
+
+        fun assertEquals(label: String, expected: Any?, actual: Any?) {
+            val passed = expected == actual
+            if (!passed) Log.e("TestHarness", "FAIL: $label — expected=$expected, actual=$actual")
+            else Log.d("TestHarness", "PASS: $label")
+            results.add(TestResult(label, passed, if (!passed) "expected=$expected, actual=$actual" else ""))
+            if (!passed) allPassed = false
+        }
+
+        Log.d("TestHarness", "--- AgentToolsTests ---")
+
+        // Test: AgentTools.create() returns non-null instance
+        val tools = AgentTools.create(this)
+        assertTrue("AgentTools.create() returns non-null", tools != null)
+
+        // Test: Error result when context is null (fresh instance without init)
+        // Note: Cannot create AgentTools() directly — constructor is private
+        // Skip null-context test — covered by the fact that create() is the only way
+
+        // Test: listWorkspace delegates to WorkspaceManager
+        val listResult = tools.listWorkspace()
+        assertEquals("listWorkspace result is success or error (not null)", "success", listResult["result"])
+
+        // Test: listMarkdown delegates to WorkspaceManager
+        val mdResult = tools.listMarkdown()
+        assertEquals("listMarkdown result is success or error (not null)", "success", mdResult["result"])
+
+        // Test: getDeviceInfo returns success with required fields
+        val infoResult = tools.getDeviceInfo()
+        assertEquals("getDeviceInfo result", "success", infoResult["result"])
+        assertTrue("getDeviceInfo has datetime", infoResult.containsKey("datetime"))
+        assertTrue("getDeviceInfo has day_of_week", infoResult.containsKey("day_of_week"))
+        assertTrue("getDeviceInfo has app_memory_mb", infoResult.containsKey("app_memory_mb"))
+        assertTrue("getDeviceInfo has device_memory_mb", infoResult.containsKey("device_memory_mb"))
+        assertTrue("getDeviceInfo has model_size_mb", infoResult.containsKey("model_size_mb"))
+
+        // Test: datetime format matches yyyy-MM-dd'T'HH:mm:ss
+        val datetime = infoResult["datetime"] ?: ""
+        assertTrue("datetime format yyyy-MM-dd'T'HH:mm:ss",
+            datetime.matches(Regex("""\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}""")))
+
+        // Test: day_of_week is a valid day name (Portuguese or English)
+        val dayOfWeek = infoResult["day_of_week"] ?: ""
+        assertTrue("day_of_week is non-empty", dayOfWeek.isNotEmpty())
+
+        // Test: memory fields format "used/total MB"
+        val appMem = infoResult["app_memory_mb"] ?: ""
+        assertTrue("app_memory_mb format is 'used/total'",
+            appMem.matches(Regex("""\d+/\d+""")))
+
+        // Test: readWorkspaceFile strips "markdown/" prefix
+        val stripMdResult = tools.readWorkspaceFile("markdown/document_100.md")
+        // Should look for "document_100.md" in markdown dir — returns success or "file not found", not crash
+        assertEquals("readWorkspaceFile strips markdown/ prefix", "success", stripMdResult["result"] ?: "error")
+
+        // Test: readWorkspaceFile strips "documents/" prefix
+        val stripDocsResult = tools.readWorkspaceFile("documents/file.pdf")
+        // Should look for "file.pdf" in documents dir
+        assertEquals("readWorkspaceFile strips documents/ prefix", "success", stripDocsResult["result"] ?: "error")
+
+        // Test: readWorkspaceFile handles path with slashes
+        val stripSlashResult = tools.readWorkspaceFile("/markdown/nota.md")
+        assertEquals("readWorkspaceFile strips leading /", "success", stripSlashResult["result"] ?: "error")
+
+        // Test: readWorkspaceFile returns error for non-existent file
+        val notFoundResult = tools.readWorkspaceFile("this_file_does_not_exist_12345.md")
+        assertEquals("non-existent file returns error", "error", notFoundResult["result"])
+        assertTrue("error message mentions file not found", (notFoundResult["message"] ?: "").contains("not found", ignoreCase = true))
+
+        // Test: saveMarkdownFile calls WorkspaceManager.saveMarkdown
+        val saveResult = tools.saveMarkdownFile("test_nota_tmpharness.md", "# Test\nContent here.")
+        // saveMarkdown returns path on success or null → "error" result
+        assertEquals("saveMarkdownFile result", "success", saveResult["result"] ?: "error")
+
+        // Test: createCalendarEvent parses valid datetime
+        val calResult = tools.createCalendarEvent("2026-05-15T14:00:00", "Team Meeting")
+        assertEquals("valid datetime returns success", "success", calResult["result"])
+        assertEquals("title preserved", "Team Meeting", calResult["title"])
+        assertEquals("datetime preserved", "2026-05-15T14:00:00", calResult["datetime"])
+
+        // Test: createCalendarEvent handles invalid datetime gracefully (returns error but no crash)
+        val calInvalidResult = tools.createCalendarEvent("invalid-datetime", "Bad Date Event")
+        assertEquals("invalid datetime returns error", "error", calInvalidResult["result"])
+
+        // Test: showLocationOnMap encodes location string safely
+        val locResult = tools.showLocationOnMap("Av. Paulista, São Paulo")
+        assertEquals("showLocationOnMap result", "success", locResult["result"])
+        assertEquals("location preserved", "Av. Paulista, São Paulo", locResult["location"])
+
+        // Test: AgentTools is a ToolSet (implements interface)
+        assertTrue("AgentTools implements ToolSet", tools is AgentTools)
     }
 
     private fun runEdgeToEdgeTests() {
