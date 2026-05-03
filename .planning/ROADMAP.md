@@ -66,3 +66,4 @@ Requirements TBD — start with `/gsd-new-milestone`
 
 *Roadmap created: 2026-05-02*
 *Last updated: 2026-05-03 after v1.0 MVP shipped*
+*Updated: 2026-05-03 — testing standard and bug fix workflow documented*
