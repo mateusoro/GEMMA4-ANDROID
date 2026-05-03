@@ -731,6 +731,7 @@ fun ChatScreen() {
                         .clickable {
                             scope.launch {
                                 val newId = ChatHistoryManager.createNewConversation(context, "Nova conversa")
+                                LlmChatModelHelper.resetConversation()
                                 currentConversationId = newId
                                 messages = emptyList()
                                 drawerState.close()
