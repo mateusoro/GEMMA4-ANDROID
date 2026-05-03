@@ -1,54 +1,4 @@
-# Project Instructions for AI Agents
-
-This file provides instructions and context for AI coding agents working on this project.
-
-<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->
-## Beads Issue Tracker
-
-This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full workflow context and commands.
-
-### Quick Reference
-
-```bash
-bd ready              # Find available work
-bd show <id>          # View issue details
-bd update <id> --claim  # Claim work
-bd close <id>         # Complete work
-```
-
-### Rules
-
-- Use `bd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists
-- Run `bd prime` for detailed command reference and session close protocol
-- Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
-
-## Session Completion
-
-**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
-
-**MANDATORY WORKFLOW:**
-
-1. **File issues for remaining work** - Create issues for anything that needs follow-up
-2. **Run quality gates** (if code changed) - Tests, linters, builds
-3. **Update issue status** - Close finished work, update in-progress items
-4. **PUSH TO REMOTE** - This is MANDATORY:
-   ```bash
-   git pull --rebase
-   bd dolt push
-   git push
-   git status  # MUST show "up to date with origin"
-   ```
-5. **Clean up** - Clear stashes, prune remote branches
-6. **Verify** - All changes committed AND pushed
-7. **Hand off** - Provide context for next session
-
-**CRITICAL RULES:**
-- Work is NOT complete until `git push` succeeds
-- NEVER stop before pushing - that leaves work stranded locally
-- NEVER say "ready to push when you are" - YOU must push
-- If push fails, resolve and retry until it succeeds
-<!-- END BEADS INTEGRATION -->
-
+# Project Instructions for AI Agents — Gemma4Android
 
 ## Build & Test
 
@@ -116,20 +66,50 @@ run {
 - Helper logic as local `fun` inside the `run {}` block (duplicates production code — keeps tests self-contained)
 - Use `assertTrue`, `assertFalse`, `assertEquals` — JUnit-style
 - Results auto-written to `files/test_results/test_results.txt` via `writeResultsToFile()`
-- All 58 existing tests must continue to pass when adding new ones
+- All existing tests must continue to pass when adding new ones
 
-### Why not `src/test/`?
+## GSD Workflow (Get Shit Done)
 
-`src/test/` contains canonical JUnit 4 test classes with correct annotations — these are the **source of truth** for test logic. However, `testDebugUnitTest` always fails due to AGP forking the test worker on JDK 21 while classes are compiled on JDK 24. TestHarnessActivity duplicates the test logic as inline functions so it can run inside the Android app process where the classpath is correct. Keep both in sync.
+Use GSD commands for all project management. Never use TodoWrite, TaskCreate, or markdown TODO lists.
 
-### Why not instrumented tests (`src/androidTest/`)?
+### Bug Fix (MANDATORY ORDER)
 
-Instrumented tests require a separate test APK and `connectedDebugAndroidTest`. For pure logic tests, the in-process TestHarnessActivity is faster and more hermetic. Stubs exist at `app/src/androidTest/` but are not the primary test vehicle.
+1. **Open debug session** — `/gsd-debug <description>` to start new session
+2. **Add diagnostic test** — reproduce bug as failing test in TestHarnessActivity
+3. **Fix the code** — implement the fix
+4. **Verify** — run tests on device, all tests pass
+5. **Commit + Push** — `git add . && git commit -m "fix: ..." && git push`
+6. **Close debug session** — mark resolved in session file (`.planning/debug/<slug>.md`)
 
-### Current coverage (58/58 passing)
+### GSD Commands Quick Ref
 
-| Suite | Tests |
-|-------|-------|
-| WavUtils | 19 |
-| WorkspaceManager | 20 |
-| PdfToMarkdownConverter | 19 |
+| Command | What it does |
+|---------|--------------|
+| `/gsd-debug <issue>` | Start new debug session (scientific method) |
+| `/gsd-debug list` | Show active debug sessions |
+| `/gsd-debug continue <slug>` | Resume existing session |
+| `/gsd-plan-phase <n>` | Create PLAN.md for a phase |
+| `/gsd-spec-phase <n>` | Create SPEC.md via Socratic interview |
+| `/gsd-new-milestone` | Start new milestone |
+| `/gsd-progress` | Check phase/milestone progress |
+
+## Key Learned Facts
+
+- System prompt must be in English starting with "You can do function call." — Portuguese makes model ignore tools
+- `ConversationConfig.systemInstruction` ignored by Gemma — prepend to user message in `sendMessage()`
+- `Channel("thought", ...)` + `extraContext: {enable_thinking: true}` for thinking mode
+- `onSettingsChange` must NOT call `reload()` — causes double-init; use `saveSettings()` only
+- Audio: WAV must have `fact` chunk (56 bytes) — raw PCM causes error -10 crash
+- ADB WiFi drops when device sleeps — reconnect with `adb connect <ip:port>`
+- Delete `app/build` before rebuild on Windows/OneDrive
+
+## Session Completion
+
+**When ending a work session**, you MUST:
+
+1. **Run quality gates** (if code changed) — build, tests
+2. **Commit all changes** — `git add . && git commit -m "..."`
+3. **PUSH TO REMOTE** — `git push`
+4. **Verify** — `git status` must show "up to date with origin"
+
+**CRITICAL:** Work is NOT complete until `git push` succeeds. Never stop before pushing.
