@@ -48,8 +48,8 @@ Current date: {CURRENT_DATE}"""
         return context.dataStore.data.map { prefs ->
             Settings(
                 maxTokens = prefs[MAX_TOKENS_KEY] ?: 2048,
-                temperature = prefs[TEMPERATURE_KEY] ?: 0.8f,
-                topK = prefs[TOP_K_KEY] ?: 10,
+                temperature = prefs[TEMPERATURE_KEY] ?: 1.0f,   // Gemma-4-E2B-IT standard
+                topK = prefs[TOP_K_KEY] ?: 64,                  // Gemma-4-E2B-IT standard
                 topP = prefs[TOP_P_KEY] ?: 0.95f,
                 systemPrompt = prefs[SYSTEM_PROMPT_KEY] ?: DEFAULT_SYSTEM_PROMPT
             )

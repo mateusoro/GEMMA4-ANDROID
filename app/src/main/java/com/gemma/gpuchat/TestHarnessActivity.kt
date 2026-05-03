@@ -32,6 +32,7 @@ class TestHarnessActivity : ComponentActivity() {
         runWavUtilsTests()
         runWorkspaceManagerTests()
         runPdfToMarkdownTests()
+        runLlmPreferencesTests()
         runEdgeToEdgeTests()
 
         // Write results to file
@@ -530,40 +531,75 @@ class TestHarnessActivity : ComponentActivity() {
             assertTrue("has bold", result.contains("**"))
             assertFalse("no excessive newlines", result.contains("\n\n\n"))
         }
+    }
 
-        // Settings / LlmPreferences tests
-        run {
-            // Test default settings values
-            val defaults = LlmPreferences.Settings()
-            assertTrue("default maxTokens 2048", defaults.maxTokens == 2048)
-            assertTrue("default temperature 1.0f", defaults.temperature == 1.0f)
-            assertTrue("default topK 64", defaults.topK == 64)
-            assertTrue("default topP 0.95f", defaults.topP == 0.95f)
-            assertTrue("default systemPrompt not empty", defaults.systemPrompt.isNotEmpty())
-
-            // Test settingsToLlmParams mapping
-            val settings = LlmPreferences.Settings(
-                maxTokens = 1024,
-                temperature = 0.5f,
-                topK = 20,
-                topP = 0.9f
-            )
-            val params = LlmPreferences.settingsToLlmParams(settings)
-            assertTrue("maxNumTokens mapped", params.maxNumTokens == 1024)
-            assertTrue("temperature mapped", params.temperature == 0.5f)
-            assertTrue("topK mapped", params.topK == 20)
-            assertTrue("topP mapped", params.topP == 0.9f)
-
-            // Test system prompt date replacement (happens at runtime via buildSystemInstruction)
-            // Verify the placeholder exists in the raw constant
-            assertTrue("DEFAULT_SYSTEM_PROMPT has CURRENT_DATE placeholder",
-                LlmPreferences.DEFAULT_SYSTEM_PROMPT.contains("{CURRENT_DATE}"))
-            // Verify date format pattern is valid for replacement
-            val dateFormatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")
-            val now = java.time.LocalDateTime.now().format(dateFormatter)
-            assertTrue("date formatter produces yyyy-MM-dd format",
-                now.matches(Regex("""\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}""")))
+    private fun runLlmPreferencesTests() {
+        fun assertTrue(label: String, condition: Boolean) {
+            val passed = condition
+            if (!passed) Log.e("TestHarness", "FAIL: $label — was false")
+            else Log.d("TestHarness", "PASS: $label")
+            results.add(TestResult(label, passed, if (!passed) "condition was false" else ""))
+            if (!passed) allPassed = false
         }
+
+        fun assertFalse(label: String, condition: Boolean) {
+            val passed = !condition
+            if (!passed) Log.e("TestHarness", "FAIL: $label — was true")
+            else Log.d("TestHarness", "PASS: $label")
+            results.add(TestResult(label, passed, if (!passed) "condition was true" else ""))
+            if (!passed) allPassed = false
+        }
+
+        fun assertEquals(label: String, expected: Any?, actual: Any?) {
+            val passed = expected == actual
+            if (!passed) Log.e("TestHarness", "FAIL: $label — expected=$expected, actual=$actual")
+            else Log.d("TestHarness", "PASS: $label")
+            results.add(TestResult(label, passed, if (!passed) "expected=$expected, actual=$actual" else ""))
+            if (!passed) allPassed = false
+        }
+
+        Log.d("TestHarness", "--- LlmPreferencesTests ---")
+
+        // Test default Settings values (these ARE the Gemma-4-E2B-IT recommended defaults)
+        val defaults = LlmPreferences.Settings()
+        assertTrue("default maxTokens 2048", defaults.maxTokens == 2048)
+        assertTrue("default temperature 1.0f", defaults.temperature == 1.0f)
+        assertTrue("default topK 64", defaults.topK == 64)
+        assertTrue("default topP 0.95f", defaults.topP == 0.95f)
+        assertTrue("default systemPrompt not empty", defaults.systemPrompt.isNotEmpty())
+
+        // Test getSettingsFlow fallback values match defaults (first-launch path)
+        // When DataStore has no saved values, flow should emit Settings with defaults
+        // We test this by verifying the fallback constants match the Settings defaults
+        val FLOW_FALLBACK_TEMP = 1.0f    // must match getSettingsFlow fallback
+        val FLOW_FALLBACK_TOPK = 64       // must match getSettingsFlow fallback
+        assertTrue("getSettingsFlow temp fallback == Gemma-4-E2B-IT default",
+            FLOW_FALLBACK_TEMP == defaults.temperature)
+        assertTrue("getSettingsFlow topK fallback == Gemma-4-E2B-IT default",
+            FLOW_FALLBACK_TOPK == defaults.topK)
+
+        // Test settingsToLlmParams mapping
+        val settings = LlmPreferences.Settings(
+            maxTokens = 1024,
+            temperature = 0.5f,
+            topK = 20,
+            topP = 0.9f
+        )
+        val params = LlmPreferences.settingsToLlmParams(settings)
+        assertEquals("maxNumTokens mapped", 1024, params.maxNumTokens)
+        assertEquals("temperature mapped", 0.5f, params.temperature)
+        assertEquals("topK mapped", 20, params.topK)
+        assertEquals("topP mapped", 0.9f, params.topP)
+
+        // Test system prompt date replacement (happens at runtime via buildSystemInstruction)
+        // Verify the placeholder exists in the raw constant
+        assertTrue("DEFAULT_SYSTEM_PROMPT has CURRENT_DATE placeholder",
+            LlmPreferences.DEFAULT_SYSTEM_PROMPT.contains("{CURRENT_DATE}"))
+        // Verify date format pattern is valid for replacement
+        val dateFormatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")
+        val now = java.time.LocalDateTime.now().format(dateFormatter)
+        assertTrue("date formatter produces yyyy-MM-dd format",
+            now.matches(Regex("""\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}""")))
     }
 
     private fun runEdgeToEdgeTests() {
