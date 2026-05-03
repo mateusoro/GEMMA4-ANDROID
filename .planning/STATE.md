@@ -19,7 +19,7 @@
 | Phase 2 | ✅ Complete | WAV header fix applied |
 | Phase 3 | ✅ Complete | Notification-based PDF processing |
 | Phase 4 | ✅ Complete | Settings slider ranges fixed, params applied on save |
-| Phase 5 | ⏳ Planned | Edge-to-edge UI — 1 plan in Wave 1 |
+| Phase 5 | ✅ Complete | Edge-to-edge UI — 1 plan, 74/74 tests passing |
 | Phase 6 | ✅ Complete | TestHarnessActivity formalized as standard |
 
 ---
