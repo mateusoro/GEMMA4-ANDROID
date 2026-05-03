@@ -12,6 +12,8 @@ android {
         applicationId = "com.gemma.gpuchat"
         minSdk = 29
         targetSdk = 35
+        multiDexEnabled = true
+        multiDexKeepFile = file("multidex-config.txt")
         ndk {
             abiFilters += listOf("arm64-v8a")
         }
@@ -30,7 +32,7 @@ android {
 }
 
 kotlin {
-    jvmToolchain(21)
+    jvmToolchain(17)
 }
 
 dependencies {

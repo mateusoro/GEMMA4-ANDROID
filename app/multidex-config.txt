@@ -1,0 +1,2 @@
+keep class com.gemma.gpuchat.MainActivity { *; }
+keep class com.gemma.gpuchat.TestHarnessActivity { *; }
