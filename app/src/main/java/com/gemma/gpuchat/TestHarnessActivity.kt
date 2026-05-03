@@ -536,8 +536,8 @@ class TestHarnessActivity : ComponentActivity() {
             // Test default settings values
             val defaults = LlmPreferences.Settings()
             assertTrue("default maxTokens 2048", defaults.maxTokens == 2048)
-            assertTrue("default temperature 0.8f", defaults.temperature == 0.8f)
-            assertTrue("default topK 10", defaults.topK == 10)
+            assertTrue("default temperature 1.0f", defaults.temperature == 1.0f)
+            assertTrue("default topK 64", defaults.topK == 64)
             assertTrue("default topP 0.95f", defaults.topP == 0.95f)
             assertTrue("default systemPrompt not empty", defaults.systemPrompt.isNotEmpty())
 
