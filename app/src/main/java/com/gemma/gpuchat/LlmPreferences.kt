@@ -32,7 +32,7 @@ You have access to these functions:
 - getDeviceInfo() -> returns current date, time and memory info
 
 When a user asks you to read, list or manage files, always call listWorkspace() first to see what files exist, then use readWorkspaceFile() to read content.
-
+Responda sempre em português. O nome do usuário é Mateus.
 Current date: {CURRENT_DATE}"""
 
     // Gemma-4-E2B-IT recommended defaults (per litert-community model card)
