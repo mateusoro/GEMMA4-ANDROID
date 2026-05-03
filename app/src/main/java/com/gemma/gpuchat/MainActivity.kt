@@ -459,21 +459,14 @@ fun ChatScreen() {
         }
     }
 
-    // Load saved settings
+    // Load saved settings THEN initialize model — chained to ensure settings are loaded first
     LaunchedEffect(Unit) {
-        settings = LlmPreferences.getSettingsFlow(context).first()
-    }
+        AppLogger.d(TAG, "[SETTINGS-LOAD] Starting load from DataStore...")
+        val loaded = LlmPreferences.getSettingsFlow(context).first()
+        AppLogger.d(TAG, "[SETTINGS-LOAD] Loaded: temp=${loaded.temperature}, topK=${loaded.topK}, topP=${loaded.topP}, maxTokens=${loaded.maxTokens}")
+        settings = loaded
 
-    // Load conversations from ChatHistoryManager
-    LaunchedEffect(Unit) {
-        ChatHistoryManager.getConversationsFlow(context).collect { convList ->
-            conversations = convList
-        }
-    }
-
-    // Initialize model
-    LaunchedEffect(Unit) {
-        AppLogger.d(TAG, "LaunchedEffect started - initializing model")
+        AppLogger.d(TAG, "[INIT-MODEL] Starting model init with loaded settings...")
         isInitializing = true
         initStage = "Procurando modelo..."
         initProgress = 0f
@@ -546,19 +539,20 @@ fun ChatScreen() {
 
             // Create AgentTools (once, outside IO thread)
             val agentTools = listOf(tool(AgentTools.create(context)))
+            AppLogger.d(TAG, "[INIT-MODEL] settings at init: temp=${settings.temperature}, topK=${settings.topK}, topP=${settings.topP}")
             val sysInstruction = buildSystemInstruction(settings.systemPrompt)
             val thinkingChannel = getThinkingChannel()
-            AppLogger.d(TAG, "AgentTools created: ${agentTools.size} ToolProviders, thinking enabled")
+            AppLogger.d(TAG, "[INIT-MODEL] AgentTools created, thinking enabled")
 
             // Run initialization on IO thread with UI-safe callbacks
             val params = LlmPreferences.settingsToLlmParams(settings)
+            AppLogger.d(TAG, "[INIT-MODEL] params: maxTokens=${params.maxNumTokens}, temp=${params.temperature}, topK=${params.topK}, topP=${params.topP}")
             withContext(Dispatchers.IO) {
                 LlmChatModelHelper.initialize(
                     context, modelPath, params, agentTools, sysInstruction,
                     listOf(thinkingChannel),
                     mapOf("enable_thinking" to true)
                 ) { stage, progress ->
-                    // Post to main thread for Compose recomposition
                     mainHandler.post {
                         initStage = stage
                         initProgress = progress / 100f
@@ -592,6 +586,13 @@ fun ChatScreen() {
             initStage = "Erro: ${e.message}"
             errorMessage = "Model init failed: ${e.message}"
             snackbarHostState.showSnackbar("Model init failed: ${e.message}")
+        }
+    }
+
+    // Load conversations from ChatHistoryManager
+    LaunchedEffect(Unit) {
+        ChatHistoryManager.getConversationsFlow(context).collect { convList ->
+            conversations = convList
         }
     }
 
@@ -678,14 +679,6 @@ fun ChatScreen() {
                 AppLogger.e(TAG, "[$prefix-ERROR] ${error.message}", error)
             }
         )
-    }
-
-    // Cleanup on dispose
-    DisposableEffect(Unit) {
-        onDispose {
-            AppLogger.d(TAG, "Disposing - releasing model")
-            LlmChatModelHelper.release()
-        }
     }
 
     // Auto-scroll on new messages
@@ -1372,9 +1365,6 @@ fun ChatScreen() {
                     settings = newSettings
                     scope.launch {
                         LlmPreferences.saveSettings(context, newSettings)
-                        val params = LlmPreferences.settingsToLlmParams(newSettings)
-                        val sysInstr = buildSystemInstruction(newSettings.systemPrompt)
-                        LlmChatModelHelper.reload(params, sysInstr)
                     }
                 },
                 onReload = { newSettings ->
