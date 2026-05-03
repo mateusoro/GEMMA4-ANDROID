@@ -1,13 +1,14 @@
 ---
 slug: new-chat-fixed-laptop-response
-status: investigating
+status: resolved
 trigger: "quando inicio uma conversa pelo novo chat ele nao esta funcionando como quando o app inicia na primeira tela. ele esta respondendo fixo laptop. deve ter alguma trava de teste esquecida la"
 created: 2026-05-03
 updated: 2026-05-03
-root_cause:
-fix:
-verification:
-files_changed: []
+root_cause: "'Nova conversa' cleared messages and switched conversation ID but never called LlmChatModelHelper.resetConversation(). The stale Conversation object (with accumulated context from the auto 'oi' test at startup) continued to be reused. Gemma-4-E2B-IT has no reset API — only conversation.close() + engine.createConversation() gives a clean slate."
+fix: "Added LlmChatModelHelper.resetConversation() in the 'Nova conversa' click handler after ChatHistoryManager.createNewConversation()"
+verification: "74/74 tests pass, APK installed and pushed"
+files_changed:
+  - app/src/main/java/com/gemma/gpuchat/MainActivity.kt
 ---
 
 ## Current Focus
