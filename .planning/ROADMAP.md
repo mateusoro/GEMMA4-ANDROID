@@ -1,113 +1,51 @@
 # Roadmap: Gemma4Android
 
 **Created:** 2026-05-02
-**Phases:** 5 | **Requirements:** 22 mapped
+**Updated:** 2026-05-03 after v1.0 MVP shipped
+
+---
+## Milestones
+
+- ✅ **v1.0 MVP** — Phases 1-6 (shipped 2026-05-03) — 22/22 requirements satisfied, 76/76 tests passing
+- 🚧 **v1.1** — Planned (questioning → research → requirements → roadmap)
 
 ---
 
-## Phase 1: Chat Core + Tool Integration
+## Phases
 
-**Goal:** Fully functional chat with tool calling — message history, drawer, all 5 tools working.
+<details>
+<summary>✅ v1.0 MVP (Phases 1-6) — SHIPPED 2026-05-03</summary>
 
-**Requirements:** CHAT-01, CHAT-02, CHAT-03, TOOL-01, TOOL-02, TOOL-03, TOOL-04, TOOL-05, UIUX-01, UIUX-03
+- [x] Phase 1: Chat Core + Tool Integration (4/4 plans) — completed 2026-05-02
+- [x] Phase 2: Audio Recording + Transcription Fix (1/1 plan) — completed 2026-05-02
+- [x] Phase 3: PDF Processing + Workspace (1/1 plan) — completed 2026-05-02
+- [x] Phase 4: Settings + System Prompt (1/1 plan) — completed 2026-05-02
+- [x] Phase 5: Edge-to-Edge + Polish (1/1 plan) — completed 2026-05-02
+- [x] Phase 6: Testing Standard (1/1 plan) — completed 2026-05-02
 
-**Status:** ✅ Planned (4 plans in 2 waves)
+**Archive:** `.planning/milestones/v1.0-ROADMAP.md`
+**Requirements:** `.planning/milestones/v1.0-REQUIREMENTS.md`
 
-**Wave 1 — Independent tasks (can run in parallel):**
-- CHAT-01: Message send/receive + history persistence
-- TOOLS-01: All 5 tool implementations
-- UI-01: Drawer navigation + build verification
+</details>
 
-**Wave 2 — Depends on Wave 1:**
-- THINK-01: Thinking mode display (depends on CHAT-01)
+### 🚧 v1.1 (Planned)
 
-**Success Criteria:**
-1. User can send message → model responds with tool calls executed
-2. Message history persists after app restart (JSON file)
-3. Drawer opens/closes with chat/workspace/settings sections
-4. `showLocationOnMap` opens map intent with location
-5. `createCalendarEvent` creates calendar event with title/datetime
-6. `listWorkspace` returns markdown file list
-7. `readWorkspaceFile` returns file content
-8. `saveMarkdownFile` saves file to workspace
-9. `getDeviceInfo` returns datetime, memory, model size
-10. App builds without crash on Nubia device
+**Goal:** Next set of features after v1.0 MVP
+
+Requirements TBD — start with `/gsd-new-milestone`
 
 ---
 
-## Phase 2: Audio Recording + Transcription Fix
+## Progress
 
-**Goal:** Stable audio recording that transcribes correctly — fix WAV crash (error -10).
-
-**Requirements:** AUDIO-01, AUDIO-02, AUDIO-03, AUDIO-04
-
-**Success Criteria:**
-1. Mic button records audio from microphone
-2. Recording generates WAV with `fact` chunk (56 bytes) — LiteRT-LM compatible
-3. Transcription runs via AudioTranscriber CPU backend
-4. Stop button ends recording and triggers transcription
-5. No crash (MA_INVALID_FILE) when model processes audio
-
----
-
-## Phase 3: PDF Processing + Workspace
-
-**Goal:** User can attach PDFs and browse workspace files.
-
-**Requirements:** FILE-01, FILE-02, FILE-03
-
-**Success Criteria:**
-1. File picker accepts PDF files
-2. PDFBox converts PDF to markdown text
-3. Markdown content passed to model as context
-4. Workspace browser lists available markdown files
-5. User can open and read markdown files in workspace
-
----
-
-## Phase 4: Settings + System Prompt
-
-**Goal:** User-adjustable LLM params and persistent system instruction.
-
-**Requirements:** SETP-01, SETP-02, SETP-03
-
-**Success Criteria:**
-1. Settings screen shows slider for max tokens (512–4096)
-2. Settings screen shows slider for temperature (0.1–1.5)
-3. Settings screen shows slider for topK (1–50)
-4. Settings screen shows slider for topP (0.5–1.0)
-5. System prompt text field is editable
-6. All settings persist to DataStore and restore on app restart
-7. `LlmChatModelHelper.reload()` called when system prompt changes
-
----
-
-## Phase 5: Edge-to-Edge + Polish
-
-**Goal:** Modern Android UI with proper inset handling — clean header, all actions in drawer.
-
-**Requirements:** UIUX-02
-
-**Success Criteria:**
-1. Status bar and navigation bar handled with proper insets
-2. Content does not draw behind system bars
-3. Keyboard (IME) properly adjusts layout with `imePadding()`
-4. UI remains responsive and does not jank during animation
-
----
-
-## Phase 6: Testing Standard
-
-**Goal:** Formalize TestHarnessActivity in-app testing as the project standard for all future phases.
-
-**Requirements:** TEST-01
-
-**Success Criteria:**
-1. TestHarnessActivity is the standard test harness for all unit/logic tests
-2. Every new phase includes a `runXxxTests()` block in TestHarnessActivity
-3. All tests run via `adb shell am start -n com.gemma.gpuchat/.TestHarnessActivity`
-4. Results verified via `adb shell "run-as com.gemma.gpuchat cat files/test_results/test_results.txt"`
-5. TestHarnessActivity remains in app/src/main/ (not src/test/) due to AGP classpath limitations with JDK 24/21 toolchain
+| Phase | Milestone | Plans Complete | Status | Completed |
+|-------|-----------|----------------|--------|-----------|
+| 1. Chat Core + Tools | v1.0 | 4/4 | Complete | 2026-05-02 |
+| 2. Audio + Transcription | v1.0 | 1/1 | Complete | 2026-05-02 |
+| 3. PDF + Workspace | v1.0 | 1/1 | Complete | 2026-05-02 |
+| 4. Settings + System Prompt | v1.0 | 1/1 | Complete | 2026-05-02 |
+| 5. Edge-to-Edge UI | v1.0 | 1/1 | Complete | 2026-05-02 |
+| 6. Testing Standard | v1.0 | 1/1 | Complete | 2026-05-02 |
 
 ---
 
@@ -125,5 +63,6 @@
 **All v1 requirements covered:** 22/22 ✓
 
 ---
+
 *Roadmap created: 2026-05-02*
-*Next step: /gsd-plan-phase 1*
+*Last updated: 2026-05-03 after v1.0 MVP shipped*
