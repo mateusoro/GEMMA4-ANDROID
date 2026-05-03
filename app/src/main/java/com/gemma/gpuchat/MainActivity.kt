@@ -1375,15 +1375,15 @@ fun ChatScreen() {
                         LlmChatModelHelper.updateParams(LlmPreferences.settingsToLlmParams(newSettings))
                     }
                 },
-                onReload = {
+                onReload = { newSettings ->
                     isReloading = true
                     messages = emptyList()
                     initStage = "Recarregando..."
                     initProgress = 0f
                     isInitializing = true
                     scope.launch {
-                        val params = LlmPreferences.settingsToLlmParams(settings)
-                        val sysInstr = buildSystemInstruction(settings.systemPrompt)
+                        val params = LlmPreferences.settingsToLlmParams(newSettings)
+                        val sysInstr = buildSystemInstruction(newSettings.systemPrompt)
                         LlmChatModelHelper.reload(params, sysInstr) { stage, progress ->
                             mainHandler.post {
                                 initStage = stage
@@ -1548,7 +1548,7 @@ fun MarkdownText(text: String, color: androidx.compose.ui.graphics.Color, modifi
 fun SettingsDialog(
     settings: LlmPreferences.Settings,
     onSettingsChange: (LlmPreferences.Settings) -> Unit,
-    onReload: () -> Unit,
+    onReload: (LlmPreferences.Settings) -> Unit,
     onDismiss: () -> Unit
 ) {
     var maxTokens by remember { mutableStateOf(settings.maxTokens.toFloat()) }
@@ -1626,7 +1626,7 @@ fun SettingsDialog(
                         systemPrompt = systemPrompt
                     )
                     onSettingsChange(newSettings)
-                    onReload()
+                    onReload(newSettings)
                     onDismiss()
                 }
             ) {
