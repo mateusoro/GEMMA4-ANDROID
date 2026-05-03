@@ -1372,7 +1372,9 @@ fun ChatScreen() {
                     settings = newSettings
                     scope.launch {
                         LlmPreferences.saveSettings(context, newSettings)
-                        LlmChatModelHelper.updateParams(LlmPreferences.settingsToLlmParams(newSettings))
+                        val params = LlmPreferences.settingsToLlmParams(newSettings)
+                        val sysInstr = buildSystemInstruction(newSettings.systemPrompt)
+                        LlmChatModelHelper.reload(params, sysInstr)
                     }
                 },
                 onReload = { newSettings ->
