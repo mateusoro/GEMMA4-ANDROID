@@ -593,25 +593,26 @@ class TestHarnessActivity : ComponentActivity() {
 
         Log.d("TestHarness", "--- EdgeToEdgeTests ---")
 
-        // enableEdgeToEdge - verify via activity-compose (the library that provides it)
+        // enableEdgeToEdge - verify via activity-compose library (ComponentActivity)
         val enableEdgeToEdgeAvailable = try {
             Class.forName("androidx.activity.ComponentActivity")
             true
         } catch (e: ClassNotFoundException) { false }
         assertTrue("enableEdgeToEdge available (activity-compose library)", enableEdgeToEdgeAvailable)
 
-        // imePadding - verify via foundation layout Row (the composable that uses it)
+        // imePadding - verify via foundation layout library (Arrangement is a concrete class)
         val imePaddingAvailable = try {
-            Class.forName("androidx.compose.foundation.layout.Row")
+            Class.forName("androidx.compose.foundation.layout.Arrangement")
             true
         } catch (e: ClassNotFoundException) { false }
-        assertTrue("imePadding available (foundation library)", imePaddingAvailable)
+        assertTrue("imePadding available (foundation layout library)", imePaddingAvailable)
 
-        // ModalDrawerSheet - concrete class
+        // ModalDrawerSheet - verify via Material3 library (DrawerValue proves material3 loaded)
         val drawerSheetAvailable = try {
-            Class.forName("androidx.compose.material3.ModalDrawerSheet") != null
+            Class.forName("androidx.compose.material3.DrawerValue")
+            true
         } catch (e: ClassNotFoundException) { false }
-        assertTrue("ModalDrawerSheet available", drawerSheetAvailable)
+        assertTrue("ModalDrawerSheet available (material3 library)", drawerSheetAvailable)
 
         // WindowInsets - concrete class with safeDrawing extension
         val safeDrawingAvailable = try {
