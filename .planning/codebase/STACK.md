@@ -11,7 +11,7 @@
 | **Min SDK** | 29 (Android 10) |
 | **Target SDK** | 35 (Android 15) |
 | **JVM Target** | Java 17 |
-| **JVM Toolchain** | Kotlin 21 |
+| **JVM Toolchain** | Kotlin 21 → Java 17 (jvmToolchain(17)) |
 
 ## Framework & UI
 
