@@ -35,11 +35,12 @@ When a user asks you to read, list or manage files, always call listWorkspace() 
 
 Current date: {CURRENT_DATE}"""
 
+    // Gemma-4-E2B-IT recommended defaults (per litert-community model card)
     data class Settings(
         val maxTokens: Int = 2048,
-        val temperature: Float = 0.8f,
-        val topK: Int = 10,
-        val topP: Float = 0.95f,
+        val temperature: Float = 1.0f,   // Gemma-4-E2B-IT standard: 1.0
+        val topK: Int = 64,              // Gemma-4-E2B-IT standard: 64
+        val topP: Float = 0.95f,         // Gemma-4-E2B-IT standard: 0.95
         val systemPrompt: String = DEFAULT_SYSTEM_PROMPT
     )
 

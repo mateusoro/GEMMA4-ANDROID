@@ -28,12 +28,12 @@ object LlmChatModelHelper {
     // Memory info
     private var loadedModelSizeBytes: Long = 0L
 
-    // LLM Parameters
+    // LLM Parameters — Gemma-4-E2B-IT recommended defaults (per litert-community model card)
     data class LlmParams(
         val maxNumTokens: Int = 2048,
-        val temperature: Float = 0.8f,
-        val topK: Int = 10,
-        val topP: Float = 0.95f
+        val temperature: Float = 1.0f,   // Gemma-4-E2B-IT standard: 1.0 (neutral, balanced creativity)
+        val topK: Int = 64,              // Gemma-4-E2B-IT standard: 64
+        val topP: Float = 0.95f          // Gemma-4-E2B-IT standard: 0.95
     )
 
     private var currentParams: LlmParams = LlmParams()

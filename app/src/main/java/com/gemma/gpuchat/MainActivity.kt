@@ -1582,13 +1582,13 @@ fun SettingsDialog(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Top K
+                // Top K (Gemma-4-E2B-IT standard: 64, allow 1-80 range)
                 Text("Top-K: ${topK.toInt()}")
                 Slider(
                     value = topK,
                     onValueChange = { topK = it },
-                    valueRange = 1f..50f,
-                    steps = 48,
+                    valueRange = 1f..80f,
+                    steps = 78,
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(modifier = Modifier.height(8.dp))
