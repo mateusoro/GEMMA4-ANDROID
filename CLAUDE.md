@@ -19,6 +19,20 @@ adb shell "run-as com.gemma.gpuchat cat files/test_results/test_results.txt"
 
 Android chat app using on-device AI (Gemma-4-E2B-IT via LiteRT-LM GPU backend, 2.58GB at `/data/local/tmp/gemma-4-E2B-it.litertlm`). Compose UI with Material3. LiteRT-LM handles tool calling internally via `automaticToolCalling = true`. WAV audio recording with `fact` chunk (56 bytes). PDF processing via PDFBox notification-based approach.
 
+## Logging & Debugging
+
+**IMPORTANT: logcat does NOT work on this device.** All app logs must be read from the log file:
+
+```bash
+# Read app log file (run-as required)
+adb shell "run-as com.gemma.gpuchat cat files/gemma_startup.nlog"
+
+# Read test results
+adb shell "run-as com.gemma.gpuchat cat files/test_results/test_results.txt"
+```
+
+The app writes all logs to `files/gemma_startup.nlog` in the app's filesDir.
+
 ## Conventions & Patterns
 
 - Compose callbacks from LiteRT-LM run on background threads — use `mainHandler.post {}` for UI updates
@@ -102,6 +116,9 @@ Use GSD commands for all project management. Never use TodoWrite, TaskCreate, or
 - Audio: WAV must have `fact` chunk (56 bytes) — raw PCM causes error -10 crash
 - ADB WiFi drops when device sleeps — reconnect with `adb connect <ip:port>`
 - Delete `app/build` before rebuild on Windows/OneDrive
+- **systemInstruction: Use `Contents.of(listOf(Content.Text(...)))` NOT `Contents.of(string)`** — Gallery pattern, see `.planning/debug/file-list-tool-no-response.md`
+- **Model needs warmup** — first inference after restart may return 0 chars; restart app and retry
+- **logcat broken on this device** — read logs from `files/gemma_startup.nlog` via `run-as`
 
 ## Session Completion
 

@@ -31,6 +31,21 @@ All 6 phases complete. Next: start v1.1 with `/gsd-new-milestone`.
 
 *No blockers currently*
 
+## Debug Session: file-list-tool-no-response
+
+**Status:** ✅ RESOLVED (2026-05-04)
+**Issue:** Gemma-4-E2B-IT tool calling not working — 0-char responses
+**Root cause:** `Contents.of(string)` vs `Contents.of(listOf(Content.Text))` — wrong format
+**Fix:** Changed `buildSystemInstruction()` to follow Google AI Edge Gallery pattern
+
+**Key findings:**
+- Gemma-4-E2B-IT never generates `toolCalls > 0` — responds with text directly
+- System instruction MUST be `Contents.of(listOf(Content.Text))` not `Contents.of(string)`
+- Build cache causes 0-char issues — always use clean build
+- Model needs warmup: first inference may return 0 chars, restart and retry
+
+**Reference:** `.planning/debug/file-list-tool-no-response.md`
+
 ---
 ## Notes
 
