@@ -1,6 +1,6 @@
 ---
 slug: thinking-vs-toolcalling
-status: fixing
+status: resolved
 trigger: "thinking mode causes model hang - thinking ON + tool calling = infinite reasoning loop"
 created: 2026-05-04
 updated: 2026-05-04

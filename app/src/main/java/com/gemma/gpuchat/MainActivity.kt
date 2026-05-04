@@ -1564,6 +1564,18 @@ data class ChatMessage(
     val thinkingText: String = ""  // THINK-05: streaming thought content from channels["thought"]
 )
 
+private fun formatThinkingText(text: String): String {
+    val words = text.trim().split("\\s+".toRegex())
+    val lines = mutableListOf<String>()
+    var i = 0
+    while (i < words.size && lines.size < 4) {
+        val line = words.drop(i).take(5).joinToString(" ")
+        lines.add(line)
+        i += 5
+    }
+    return lines.joinToString("\n")
+}
+
 @Composable
 fun ThinkingBubble(thinkingText: String) {
     if (thinkingText.isEmpty()) return
@@ -1598,13 +1610,14 @@ fun ThinkingBubble(thinkingText: String) {
                     modifier = Modifier.padding(bottom = 2.dp)
                 )
                 Text(
-                    text = thinkingText,
+                    text = formatThinkingText(thinkingText),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = if (isExpanded) Int.MAX_VALUE else 4,
+                    maxLines = 4,
                     overflow = TextOverflow.Ellipsis
                 )
-                if (thinkingText.lines().size > 4) {
+                val wordCount = thinkingText.trim().split("\\s+".toRegex()).size
+                if (wordCount > 20) {
                     TextButton(
                         onClick = { isExpanded = !isExpanded },
                         modifier = Modifier.padding(top = 2.dp)
