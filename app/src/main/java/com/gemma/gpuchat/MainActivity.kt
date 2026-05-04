@@ -110,7 +110,13 @@ private const val TAG = "GemmaApp"
 private fun buildSystemInstruction(customPrompt: String): Contents {
     val now = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
     val prompt = customPrompt.replace("{CURRENT_DATE}", now)
-    return Contents.of(prompt)
+    // Follow Gallery pattern: Contents.of(List<Content.Text>) not Contents.of(String)
+    return Contents.of(
+        listOf(
+            "You are a model that can do function calling with the following functions.",
+            "Current date: $now"
+        ).map { com.google.ai.edge.litertlm.Content.Text(it) }
+    )
 }
 
 // Channel config for Gemma's built-in thinking/reasoning output
