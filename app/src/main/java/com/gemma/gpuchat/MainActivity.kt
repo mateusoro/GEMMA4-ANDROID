@@ -1472,7 +1472,8 @@ data class ChatMessage(
     val isUser: Boolean,
     val throughput: Float = 0f,
     val tokenCount: Int = 0,
-    val durationMs: Long = 0L
+    val durationMs: Long = 0L,
+    val thinkingText: String = ""  // THINK-05: streaming thought content from channels["thought"]
 )
 
 @Composable

@@ -266,7 +266,8 @@ val convConfig = ConversationConfig(
         onToken: (String) -> Unit,
         onDone: () -> Unit,
         onError: (Throwable) -> Unit,
-        extraContext: Map<String, String> = emptyMap()
+        extraContext: Map<String, String> = emptyMap(),
+        onThinking: ((String) -> Unit)? = null  // THINK-06: nullable callback for thought channel tokens
     ) {
         AppLogger.d(TAG, ">>> sendMessage() CALLED <<<")
 
@@ -328,6 +329,7 @@ val convConfig = ConversationConfig(
                 val thinkingContent = message.channels["thought"]
                 if (!thinkingContent.isNullOrEmpty()) {
                     AppLogger.d(TAG, "[THOUGHT-CHANNEL] $thinkingContent")
+                    onThinking?.invoke(thinkingContent)
                 }
 
                 try {

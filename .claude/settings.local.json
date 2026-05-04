@@ -17,7 +17,9 @@
       "Bash(adb -s 192.168.0.17:42815 shell \"run-as com.gemma.gpuchat rm files/gemma_startup.nlog\")",
       "Bash(adb -s 192.168.0.17:42815 shell am force-stop com.gemma.gpuchat)",
       "Bash(adb -s 192.168.0.17:42815 shell \"run-as com.gemma.gpuchat ls files/\")",
-      "Bash(adb *)"
+      "Bash(adb *)",
+      "Bash(mkdir -p ~/.gsd)",
+      "Bash(echo '{\"mode\":\"yolo\",\"granularity\":\"standard\",\"parallelization\":true,\"commit_docs\":true,\"model_profile\":\"balanced\",\"workflow\":{\"research\":true,\"plan_check\":true,\"verifier\":true,\"nyquist_validation\":true,\"auto_advance\":true}}')"
     ]
   }
 }
