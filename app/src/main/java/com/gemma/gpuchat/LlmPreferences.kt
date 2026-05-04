@@ -20,19 +20,9 @@ object LlmPreferences {
     private val TOP_P_KEY = floatPreferencesKey("top_p")
     private val SYSTEM_PROMPT_KEY = stringPreferencesKey("system_prompt")
 
-    // Default system prompt — used as initial value and fallback
-    const val DEFAULT_SYSTEM_PROMPT = """You can do function call.
-You have access to these functions:
-- listWorkspace() -> lists all files in the workspace (documents and markdown)
-- listMarkdown() -> lists only .md files in the workspace
-- readWorkspaceFile(filename) -> reads a file content. Pass just the filename like "documento.md", the function searches in both markdown/ and documents/ folders automatically
-- saveMarkdownFile(filename, content) -> saves a .md file
-- showLocationOnMap(location) -> opens the map with the specified location
-- createCalendarEvent(datetime, title) -> creates a calendar event. datetime format: "2026-05-15T14:00:00"
-- getDeviceInfo() -> returns current date, time and memory info
+    // Default system prompt — Gallery-style, simple
+    const val DEFAULT_SYSTEM_PROMPT = """You are a model that can do function calling with the following functions.
 
-When a user asks you to read, list or manage files, always call listWorkspace() first to see what files exist, then use readWorkspaceFile() to read content.
-Responda sempre em português. O nome do usuário é Mateus.
 Current date: {CURRENT_DATE}"""
 
     // Gemma-4-E2B-IT recommended defaults (per litert-community model card)

@@ -34,6 +34,7 @@ class TestHarnessActivity : ComponentActivity() {
         runPdfToMarkdownTests()
         runLlmPreferencesTests()
         runAgentToolsTests()
+        runToolCallingIntegrationTests()
         runEdgeToEdgeTests()
 
         // Write results to file
@@ -723,6 +724,180 @@ class TestHarnessActivity : ComponentActivity() {
 
         // Test: AgentTools is a ToolSet (implements interface)
         assertTrue("AgentTools implements ToolSet", tools is AgentTools)
+    }
+
+    private fun runToolCallingIntegrationTests() {
+        fun assertTrue(label: String, condition: Boolean) {
+            val passed = condition
+            if (!passed) Log.e("TestHarness", "FAIL: $label — was false")
+            else Log.d("TestHarness", "PASS: $label")
+            results.add(TestResult(label, passed, if (!passed) "condition was false" else ""))
+            if (!passed) allPassed = false
+        }
+
+        fun assertFalse(label: String, condition: Boolean) {
+            val passed = !condition
+            if (!passed) Log.e("TestHarness", "FAIL: $label — was true")
+            else Log.d("TestHarness", "PASS: $label")
+            results.add(TestResult(label, passed, if (!passed) "condition was true" else ""))
+            if (!passed) allPassed = false
+        }
+
+        fun assertEquals(label: String, expected: Any?, actual: Any?) {
+            val passed = expected == actual
+            if (!passed) Log.e("TestHarness", "FAIL: $label — expected=$expected, actual=$actual")
+            else Log.d("TestHarness", "PASS: $label")
+            results.add(TestResult(label, passed, if (!passed) "expected=$expected, actual=$actual" else ""))
+            if (!passed) allPassed = false
+        }
+
+        Log.d("TestHarness", "--- ToolCallingIntegrationTests ---")
+
+        // Find model path — same logic as MainActivity
+        val modelCandidates = listOf(
+            "gemma-4-E2B-it.litertlm",
+            "gemma3-1b-it-q4.litertlm",
+            "gemma4_generic.litertlm",
+            "Gemma3-1B-IT.litertlm",
+            "Gemma3-1B-IT_multi-prefill-seq_q4_ekv4096.litertlm",
+            "Gemma3-1B-IT-LiteRT.litertlm",
+            "gemma3-1b-it-q4_ekv.litertlm"
+        )
+        var modelPath: String? = null
+        for (candidate in modelCandidates) {
+            val path = "/data/local/tmp/$candidate"
+            if (File(path).exists()) {
+                modelPath = path
+                Log.d("TestHarness", "Found model at: $path")
+                break
+            }
+        }
+        if (modelPath == null) {
+            val filesDir = filesDir
+            for (candidate in modelCandidates) {
+                val path = File(filesDir, candidate).absolutePath
+                if (File(path).exists()) {
+                    modelPath = path
+                    Log.d("TestHarness", "Found model at: $path")
+                    break
+                }
+            }
+        }
+        if (modelPath == null) {
+            for (candidate in modelCandidates) {
+                val path = "/sdcard/$candidate"
+                if (File(path).exists()) {
+                    modelPath = path
+                    Log.d("TestHarness", "Found model at: $path")
+                    break
+                }
+            }
+        }
+
+        if (modelPath == null) {
+            Log.e("TestHarness", "SKIP: No model found for tool calling test")
+            results.add(TestResult("ToolCallingIntegration: model found", false, "No model found"))
+            allPassed = false
+            return
+        }
+
+        // Create AgentTools instance
+        val agentToolsInstance = AgentTools.create(this)
+        val agentTools = listOf(com.google.ai.edge.litertlm.tool(agentToolsInstance))
+        val sysInstruction = com.google.ai.edge.litertlm.Contents.of(LlmPreferences.DEFAULT_SYSTEM_PROMPT)
+
+        Log.d("TestHarness", "Initializing LlmChatModelHelper with model: $modelPath")
+
+        // CountDownLatch to wait for init
+        val initLatch = java.util.concurrent.CountDownLatch(1)
+        var initFailed: String? = null
+        var initComplete = false
+
+        try {
+            LlmChatModelHelper.initialize(
+                this,
+                modelPath!!,
+                LlmChatModelHelper.LlmParams(),
+                agentToolsInstance,
+                agentTools,
+                sysInstruction,
+                null,
+                mapOf("enable_thinking" to false)
+            ) { stage, progress ->
+                Log.d("TestHarness", "[INIT] $stage ($progress%)")
+            }
+            initComplete = true
+        } catch (e: Exception) {
+            initFailed = e.message ?: "unknown error"
+            Log.e("TestHarness", "Init failed: $initFailed", e)
+        } finally {
+            initLatch.countDown()
+        }
+
+        assertTrue("LlmChatModelHelper initialized", initComplete && initFailed == null)
+
+        if (initFailed != null) {
+            Log.e("TestHarness", "SKIP: LLM init failed: $initFailed")
+            results.add(TestResult("ToolCallingIntegration: init success", false, initFailed))
+            allPassed = false
+            // Release and exit
+            try { LlmChatModelHelper.release() } catch (_: Exception) { }
+            return
+        }
+
+        // Now send a message that should trigger listWorkspace
+        Log.d("TestHarness", "Sending test message to trigger listWorkspace...")
+
+        val tokenBuffer = StringBuilder()
+        val doneLatch = java.util.concurrent.CountDownLatch(1)
+        var onDoneFired = false
+        var onErrorMsg: String? = null
+
+        LlmChatModelHelper.sendMessage(
+            "List all files in the workspace",
+            onToken = { token ->
+                synchronized(tokenBuffer) {
+                    tokenBuffer.append(token)
+                }
+                Log.d("TestHarness", "[TOKEN] '$token'")
+            },
+            onDone = {
+                onDoneFired = true
+                Log.d("TestHarness", "[ONDONE] fired")
+                doneLatch.countDown()
+            },
+            onError = { err ->
+                onErrorMsg = err.message
+                Log.e("TestHarness", "[ONERROR] ${err.message}", err)
+                doneLatch.countDown()
+            }
+        )
+
+        // Wait up to 120 seconds for response (model generation can be slow)
+        val timedOut = !doneLatch.await(120, java.util.concurrent.TimeUnit.SECONDS)
+
+        assertFalse("ToolCalling: did not timeout", timedOut)
+
+        if (onErrorMsg != null) {
+            assertTrue("ToolCalling: no error", false)
+            results.add(TestResult("ToolCallingIntegration: sendMessage success", false, onErrorMsg!!))
+        } else {
+            assertTrue("ToolCalling: onDone fired", onDoneFired)
+        }
+
+        val fullResponse = synchronized(tokenBuffer) { tokenBuffer.toString() }
+        assertTrue("ToolCalling: response not empty", fullResponse.isNotEmpty())
+
+        Log.d("TestHarness", "[FULL RESPONSE] length=${fullResponse.length} text=${fullResponse.take(200)}")
+        results.add(TestResult("ToolCallingIntegration: response length", true,
+            "length=${fullResponse.length}"))
+
+        // Cleanup
+        try { LlmChatModelHelper.release() } catch (e: Exception) {
+            Log.e("TestHarness", "release() error: ${e.message}", e)
+        }
+
+        Log.d("TestHarness", "--- ToolCallingIntegrationTests complete ---")
     }
 
     private fun runEdgeToEdgeTests() {

@@ -538,20 +538,21 @@ fun ChatScreen() {
             initProgress = 0.1f
 
             // Create AgentTools (once, outside IO thread)
-            val agentTools = listOf(tool(AgentTools.create(context)))
+            val agentToolsInstance = AgentTools.create(context)
+            val agentTools = listOf(tool(agentToolsInstance))
             AppLogger.d(TAG, "[INIT-MODEL] settings at init: temp=${settings.temperature}, topK=${settings.topK}, topP=${settings.topP}")
             val sysInstruction = buildSystemInstruction(settings.systemPrompt)
             val thinkingChannel = getThinkingChannel()
-            AppLogger.d(TAG, "[INIT-MODEL] AgentTools created, thinking enabled")
+            AppLogger.d(TAG, "[INIT-MODEL] AgentTools created, thinking DISABLED for testing")
 
             // Run initialization on IO thread with UI-safe callbacks
             val params = LlmPreferences.settingsToLlmParams(settings)
             AppLogger.d(TAG, "[INIT-MODEL] params: maxTokens=${params.maxNumTokens}, temp=${params.temperature}, topK=${params.topK}, topP=${params.topP}")
             withContext(Dispatchers.IO) {
                 LlmChatModelHelper.initialize(
-                    context, modelPath, params, agentTools, sysInstruction,
-                    listOf(thinkingChannel),
-                    mapOf("enable_thinking" to true)
+                    context, modelPath, params, agentToolsInstance, agentTools, sysInstruction,
+                    emptyList(),
+                    mapOf("enable_thinking" to false)
                 ) { stage, progress ->
                     mainHandler.post {
                         initStage = stage
@@ -578,7 +579,7 @@ fun ChatScreen() {
             initProgress = 1f
             AppLogger.i(TAG, "Model initialized successfully!")
 
-            // Auto-test: send "oi" to trigger thinking mode
+            // Auto-test: send "Liste os arquivos" to test tool calling
             autoMessageState = 1
         } catch (e: Exception) {
             isInitializing = false
@@ -601,18 +602,18 @@ fun ChatScreen() {
         return msgs.indexOfLast { !it.isUser }
     }
 
-    // Auto-test: send "oi" — system prompt is now prepended to user message via LlmChatModelHelper.sendMessage workaround (ConversationConfig.systemInstruction is ignored by Gemma-4-E2B-IT)
+    // Auto-test: send "Liste os arquivos" — system prompt is now prepended to user message via LlmChatModelHelper.sendMessage workaround (ConversationConfig.systemInstruction is ignored by Gemma-4-E2B-IT)
     LaunchedEffect(isModelReady, autoMessageState) {
         if (isModelReady && autoMessageState == 1) {
             AppLogger.i(TAG, "[AUTO] Sending 'oi' (systemPrompt prepended to message as workaround)")
-            val userMsg = ChatMessage(text = "oi", isUser = true)
+            val userMsg = ChatMessage(text = "Liste os arquivos", isUser = true)
             messages = messages + userMsg
             val botMsg = ChatMessage(text = "", isUser = false)
             messages = messages + botMsg
             val startTime = System.currentTimeMillis()
 
             LlmChatModelHelper.sendMessage(
-                message = "oi",
+                message = "Liste os arquivos",
                 onToken = { token ->
                     AppLogger.d(TAG, "[THINK-TOKEN] $token")
                     messages = messages.mapIndexed { index, msg ->
