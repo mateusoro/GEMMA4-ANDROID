@@ -18,6 +18,10 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -424,7 +428,7 @@ fun ChatScreen() {
                                     val tp = if (duration > 0) text.length * 1000f / duration else 0f
                                     throughput = tp
                                     messages = messages.mapIndexed { idx, msg ->
-                                        if (idx == lastBot) msg.copy(throughput = tp, tokenCount = text.length, durationMs = duration) else msg
+                                        if (idx == lastBot) msg.copy(throughput = tp, tokenCount = text.length, durationMs = duration, thinkingText = "") else msg
                                     }
                                 }
                                 memoryInfo = LlmChatModelHelper.getMemoryUsage()
@@ -648,6 +652,12 @@ fun ChatScreen() {
                     AppLogger.i(TAG, "[AUTO-DONE] 'oi' response: $count chars in ${duration}ms (${tp} tk/s)")
                     AppLogger.i(TAG, "=== THINKING MODE TEST COMPLETE ===")
                     autoMessageState = 2
+                    // THINK-12: Clear thinkingText on done
+                    if (lastBotIdx >= 0) {
+                        messages = messages.mapIndexed { idx, msg ->
+                            if (idx == lastBotIdx) msg.copy(thinkingText = "") else msg
+                        }
+                    }
                 },
                 onError = { error ->
                     AppLogger.e(TAG, "[AUTO-ERROR] ${error.message}", error)
@@ -697,7 +707,7 @@ fun ChatScreen() {
                     AppLogger.i(TAG, "[$prefix-THROUGHPUT] tk/s=$tp count=$tokenCount dur=$duration")
                     messages = messages.mapIndexed { idx, msg ->
                         if (idx == lastBotIdx) {
-                            msg.copy(throughput = tp, tokenCount = tokenCount, durationMs = duration)
+                            msg.copy(throughput = tp, tokenCount = tokenCount, durationMs = duration, thinkingText = "")
                         } else msg
                     }
                 }
@@ -1004,7 +1014,11 @@ fun ChatScreen() {
                     item { Spacer(modifier = Modifier.height(8.dp)) }
                     items(messages) { message ->
                         Column {
-                            if (!message.isUser && message.thinkingText.isNotEmpty()) {
+                            AnimatedVisibility(
+                                visible = !message.isUser && message.thinkingText.isNotEmpty(),
+                                enter = fadeIn(animationSpec = tween(200)),
+                                exit = fadeOut(animationSpec = tween(300))
+                            ) {
                                 ThinkingBubble(thinkingText = message.thinkingText)
                             }
                             ChatBubble(
@@ -1098,7 +1112,7 @@ fun ChatScreen() {
                                                                 val tp = if (duration > 0) text.length * 1000f / duration else 0f
                                                                 throughput = tp
                                                                 messages = messages.mapIndexed { idx, msg ->
-                                                                    if (idx == lastBot) msg.copy(throughput = tp, tokenCount = text.length, durationMs = duration) else msg
+                                                                    if (idx == lastBot) msg.copy(throughput = tp, tokenCount = text.length, durationMs = duration, thinkingText = "") else msg
                                                                 }
                                                             }
                                                             currentConversationId?.let { convId ->
@@ -1122,7 +1136,7 @@ fun ChatScreen() {
                                                             val lastBot = messages.indexOfLast { !it.isUser }
                                                             if (lastBot >= 0) {
                                                                 messages = messages.mapIndexed { idx, msg ->
-                                                                    if (idx == lastBot) msg.copy(text = "Erro: ${error.message}") else msg
+                                                                    if (idx == lastBot) msg.copy(text = "Erro: ${error.message}", thinkingText = "") else msg
                                                                 }
                                                             }
                                                         }
@@ -1247,7 +1261,7 @@ fun ChatScreen() {
                                         val duration = System.currentTimeMillis() - startTime
                                         val tp = if (duration > 0) (tokenCount * 1000f) / duration else 0f
                                         throughput = tp
-                                        messages = messages.mapIndexed { idx, msg -> if (idx == lastBotIdx) msg.copy(throughput = tp, tokenCount = tokenCount, durationMs = duration) else msg }
+                                        messages = messages.mapIndexed { idx, msg -> if (idx == lastBotIdx) msg.copy(throughput = tp, tokenCount = tokenCount, durationMs = duration, thinkingText = "") else msg }
                                     }
                                     memoryInfo = LlmChatModelHelper.getMemoryUsage()
                                     systemMemoryInfo = LlmChatModelHelper.getSystemMemory(context)
@@ -1261,7 +1275,7 @@ fun ChatScreen() {
                                 onError = { error -> mainHandler.post {
                                     isResponding = false
                                     val lastBotIdx = messages.indexOfLast { !it.isUser }
-                                    if (lastBotIdx >= 0) messages = messages.mapIndexed { idx, msg -> if (idx == lastBotIdx) msg.copy(text = "Erro: ${error.message}") else msg }
+                                    if (lastBotIdx >= 0) messages = messages.mapIndexed { idx, msg -> if (idx == lastBotIdx) msg.copy(text = "Erro: ${error.message}", thinkingText = "") else msg }
                                 } },
                                 onThinking = { thinking ->
                                     mainHandler.post {
@@ -1391,7 +1405,7 @@ fun ChatScreen() {
                             throughput = tp
                             messages = messages.mapIndexed { idx, msg ->
                                 if (idx == lastBotIdx) {
-                                    msg.copy(throughput = tp, tokenCount = tokenCount, durationMs = duration)
+                                    msg.copy(throughput = tp, tokenCount = tokenCount, durationMs = duration, thinkingText = "")
                                 } else msg
                             }
                             AppLogger.i(TAG, "onDone: metrics attached to message idx=$lastBotIdx tp=$tp")
@@ -1413,7 +1427,15 @@ fun ChatScreen() {
                 },
                 onError = { error ->
                     AppLogger.e(TAG, "Error: ${error.message}", error)
-                    mainHandler.post { isResponding = false }
+                    mainHandler.post {
+                        isResponding = false
+                        val lastBot = messages.indexOfLast { !it.isUser }
+                        if (lastBot >= 0) {
+                            messages = messages.mapIndexed { idx, msg ->
+                                if (idx == lastBot) msg.copy(thinkingText = "") else msg
+                            }
+                        }
+                    }
                     scope.launch {
                         snackbarHostState.showSnackbar("Error: ${error.message}")
                     }
