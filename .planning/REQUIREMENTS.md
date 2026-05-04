@@ -45,6 +45,39 @@
 - [ ] **UIUX-02**: Edge-to-edge display — proper inset handling for modern Android
 - [ ] **UIUX-03**: App builds and runs without crash on GPU-capable devices
 
+## v1.1 Requirements (Thinking Bubble UI)
+
+### UI Components
+
+- [ ] **THINK-01**: ThinkingBubble composable com streaming de texto em tempo real
+- [ ] **THINK-02**: Max 4 linhas visíveis com `TextOverflow.Ellipsis`
+- [ ] **THINK-03**: Toggle expand/collapse com `AnimatedVisibility`
+- [ ] **THINK-04**: Estilo muted (surfaceVariant, texto menor, label "thinking...")
+
+### Data Model
+
+- [ ] **THINK-05**: Campo `thinkingText: String = ""` em ChatMessage
+- [ ] **THINK-06**: Callback `onThinking: ((String) -> Unit)?` em sendMessage()
+
+### Integration
+
+- [ ] **THINK-07**: Routing de `channels["thought"]` para UI via callback
+- [ ] **THINK-08**: LazyColumn rendering — ThinkingBubble acima da ChatBubble
+- [ ] **THINK-09**: Fade-out animado quando resposta inicia
+
+### Polish
+
+- [ ] **THINK-10**: Threading correto com `mainHandler.post{}`
+- [ ] **THINK-11**: Scroll anchoring para evitar jumps
+- [ ] **THINK-12**: Limpeza de estado em onError/onDone
+
+### Out of Scope
+
+- Pensamento persistente entre mensagens (apaga após resposta)
+- Configurable max lines via settings
+- Accessibility (TalkBack/LiveRegion)
+- Histórico de thinking por mensagem
+
 ## v2 Requirements
 
 ### Voice Output
@@ -77,6 +110,18 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
+| THINK-01 | Phase 7 | Pending |
+| THINK-02 | Phase 7 | Pending |
+| THINK-03 | Phase 7 | Pending |
+| THINK-04 | Phase 7 | Pending |
+| THINK-05 | Phase 7 | Pending |
+| THINK-06 | Phase 7 | Pending |
+| THINK-07 | Phase 8 | Pending |
+| THINK-08 | Phase 8 | Pending |
+| THINK-09 | Phase 8 | Pending |
+| THINK-10 | Phase 9 | Pending |
+| THINK-11 | Phase 9 | Pending |
+| THINK-12 | Phase 9 | Pending |
 | CHAT-01 | Phase 1 | Pending |
 | CHAT-02 | Phase 1 | Pending |
 | CHAT-03 | Phase 1 | Pending |
@@ -101,10 +146,10 @@
 | UIUX-03 | Phase 1 | Pending |
 
 **Coverage:**
-- v1 requirements: 22 total
-- Mapped to phases: 22
-- Unmapped: 0 ✓
+- v1 requirements: 22 total — mapped to phases 1-6
+- v1.1 requirements: 12 total — mapped to phases 7-9
+- Total: 34/34 requirements mapped ✓
 
 ---
 *Requirements defined: 2026-05-02*
-*Last updated: 2026-05-02 after initial definition*
+*Last updated: 2026-05-04 for v1.1 milestone*
