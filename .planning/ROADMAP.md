@@ -52,7 +52,10 @@
 4. Background thread tokens delivered to callback without blocking UI thread
 5. Existing callers to `sendMessage()` continue working without specifying `onThinking`
 
-**Plans:** TBD
+**Plans:** 1 plan
+
+Plans:
+- [ ] 07-01-PLAN.md — ChatMessage.thinkingText + sendMessage.onThinking callback wiring
 
 ---
 
@@ -72,7 +75,10 @@
 4. Expand/collapse toggle works with 4-line clamp and `TextOverflow.Ellipsis`
 5. `AnimatedVisibility` handles show/hide transitions
 
-**Plans:** TBD
+**Plans:** 1 plan
+
+Plans:
+- [ ] 08-01-PLAN.md — ThinkingBubble composable + LazyColumn integration + onThinking callback wiring
 
 **UI hint:** yes
 
@@ -108,8 +114,8 @@
 | 4. Settings + System Prompt | v1.0 | 1/1 | Complete | 2026-05-02 |
 | 5. Edge-to-Edge UI | v1.0 | 1/1 | Complete | 2026-05-02 |
 | 6. Testing Standard | v1.0 | 1/1 | Complete | 2026-05-02 |
-| 7. Foundation | v1.1 | 0/TBD | Not started | - |
-| 8. UI Implementation | v1.1 | 0/TBD | Not started | - |
+| 7. Foundation | v1.1 | 1/1 | Complete | 2026-05-04 |
+| 8. UI Implementation | v1.1 | 1/1 | Planned | - |
 | 9. Polish | v1.1 | 0/TBD | Not started | - |
 
 ---
