@@ -549,7 +549,7 @@ fun ChatScreen() {
             AppLogger.d(TAG, "[INIT-MODEL] settings at init: temp=${settings.temperature}, topK=${settings.topK}, topP=${settings.topP}")
             val sysInstruction = buildSystemInstruction(settings.systemPrompt)
             val thinkingChannel = getThinkingChannel()
-            AppLogger.d(TAG, "[INIT-MODEL] AgentTools created, thinking DISABLED for testing")
+            AppLogger.d(TAG, "[INIT-MODEL] AgentTools created, thinking ENABLED")
 
             // Run initialization on IO thread with UI-safe callbacks
             val params = LlmPreferences.settingsToLlmParams(settings)
@@ -557,8 +557,8 @@ fun ChatScreen() {
             withContext(Dispatchers.IO) {
                 LlmChatModelHelper.initialize(
                     context, modelPath, params, agentToolsInstance, agentTools, sysInstruction,
-                    emptyList(),
-                    mapOf("enable_thinking" to false)
+                    listOf(thinkingChannel),
+                    mapOf("enable_thinking" to true)
                 ) { stage, progress ->
                     mainHandler.post {
                         initStage = stage
