@@ -87,6 +87,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.gemma.gpuchat.WorkspaceManager
@@ -642,7 +643,17 @@ fun ChatScreen() {
                     AppLogger.e(TAG, "[AUTO-ERROR] ${error.message}", error)
                     autoMessageState = 2
                 },
-                extraContext = mapOf("enable_thinking" to "true")  // Gallery pattern: per message
+                extraContext = mapOf("enable_thinking" to "true"),  // Gallery pattern: per message
+                onThinking = { thinking ->
+                    mainHandler.post {
+                        val lastBot = messages.indexOfLast { !it.isUser }
+                        if (lastBot >= 0) {
+                            messages = messages.mapIndexed { idx, msg ->
+                                if (idx == lastBot) msg.copy(thinkingText = thinking) else msg
+                            }
+                        }
+                    }
+                }
             )
         }
     }
@@ -685,6 +696,16 @@ fun ChatScreen() {
             },
             onError = { error ->
                 AppLogger.e(TAG, "[$prefix-ERROR] ${error.message}", error)
+            },
+            onThinking = { thinking ->
+                mainHandler.post {
+                    val lastBot = messages.indexOfLast { !it.isUser }
+                    if (lastBot >= 0) {
+                        messages = messages.mapIndexed { idx, msg ->
+                            if (idx == lastBot) msg.copy(thinkingText = thinking) else msg
+                        }
+                    }
+                }
             }
         )
     }
@@ -972,10 +993,15 @@ fun ChatScreen() {
                 ) {
                     item { Spacer(modifier = Modifier.height(8.dp)) }
                     items(messages) { message ->
-                        ChatBubble(
-                            message = message,
-                            showMetrics = !message.isUser && message.tokenCount > 0
-                        )
+                        Column {
+                            if (!message.isUser && message.thinkingText.isNotEmpty()) {
+                                ThinkingBubble(thinkingText = message.thinkingText)
+                            }
+                            ChatBubble(
+                                message = message,
+                                showMetrics = !message.isUser && message.tokenCount > 0
+                            )
+                        }
                     }
                     item { Spacer(modifier = Modifier.height(8.dp)) }
                 }
@@ -1475,6 +1501,62 @@ data class ChatMessage(
     val durationMs: Long = 0L,
     val thinkingText: String = ""  // THINK-05: streaming thought content from channels["thought"]
 )
+
+@Composable
+fun ThinkingBubble(thinkingText: String) {
+    if (thinkingText.isEmpty()) return
+
+    var isExpanded by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 4.dp),
+        horizontalAlignment = Alignment.Start
+    ) {
+        Box(
+            modifier = Modifier
+                .widthIn(max = 260.dp)
+                .background(
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shape = RoundedCornerShape(
+                        topStart = 12.dp,
+                        topEnd = 12.dp,
+                        bottomStart = 4.dp,
+                        bottomEnd = 4.dp
+                    )
+                )
+                .padding(8.dp)
+        ) {
+            Column {
+                Text(
+                    text = "thinking...",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    modifier = Modifier.padding(bottom = 2.dp)
+                )
+                Text(
+                    text = thinkingText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = if (isExpanded) Int.MAX_VALUE else 4,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (thinkingText.lines().size > 4) {
+                    TextButton(
+                        onClick = { isExpanded = !isExpanded },
+                        modifier = Modifier.padding(top = 2.dp)
+                    ) {
+                        Text(
+                            text = if (isExpanded) "hide" else "show more",
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
 
 @Composable
 fun MarkdownText(text: String, color: androidx.compose.ui.graphics.Color, modifier: Modifier = Modifier) {
