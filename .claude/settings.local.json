@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p \"C:/Users/Administrador/OneDrive/Área de Trabalho/Mateus/Desenvolvimento/CODEX DESKTOP/GEMMA4 ANDROID/.claude/agents\")",
+      "Bash(mkdir -p \"C:/Users/Administrador/OneDrive/Área de Trabalho/Mateus/Desenvolvimento/CODEX DESKTOP/GEMMA4 ANDROID/.claude/skills/gemma-developer\")",
+      "Bash(mkdir -p \"C:/Users/Administrador/OneDrive/Área de Trabalho/Mateus/Desenvolvimento/CODEX DESKTOP/GEMMA4 ANDROID/.claude/skills/ml-engineer\")",
+      "Bash(mkdir -p \"C:/Users/Administrador/OneDrive/Área de Trabalho/Mateus/Desenvolvimento/CODEX DESKTOP/GEMMA4 ANDROID/.claude/skills/gemma-orchestrator/references\")",
+      "Bash(adb connect *)",
+      "Bash(adb -s 192.168.0.17:42815 install -r app/build/outputs/apk/debug/app-debug.apk)",
+      "Bash(adb -s 192.168.0.17:42815 shell am start -n com.gemma.gpuchat/.TestHarnessActivity)",
+      "Bash(adb -s 192.168.0.17:42815 shell \"run-as com.gemma.gpuchat cat files/test_results/test_results.txt\")",
+      "Bash(adb -s 192.168.0.17:42815 shell \"run-as com.gemma.gpuchat cat files/gemma_startup.nlog\")",
+      "Bash(adb kill-server *)",
+      "Bash(rm -rf app/build)",
+      "Bash(powershell -Command '$env:JAVA_HOME = \"C:\\\\Program Files\\\\Java\\\\jdk-24\"; .\\\\gradlew assembleDebug --no-daemon')",
+      "Bash(adb -s 192.168.0.17:42815 shell \"run-as com.gemma.gpuchat rm files/test_results/test_results.txt\")",
+      "Bash(adb -s 192.168.0.17:42815 shell \"run-as com.gemma.gpuchat rm files/gemma_startup.nlog\")",
+      "Bash(adb -s 192.168.0.17:42815 shell am force-stop com.gemma.gpuchat)",
+      "Bash(adb -s 192.168.0.17:42815 shell \"run-as com.gemma.gpuchat ls files/\")",
+      "Bash(adb *)"
+    ]
+  }
+}

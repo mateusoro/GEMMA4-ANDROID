@@ -27,7 +27,7 @@ Current date: {CURRENT_DATE}"""
 
     // Gemma-4-E2B-IT recommended defaults (per litert-community model card)
     data class Settings(
-        val maxTokens: Int = 2048,
+        val maxTokens: Int = 8192,  // TEST: 8k tokens for thinking mode
         val temperature: Float = 1.0f,   // Gemma-4-E2B-IT standard: 1.0
         val topK: Int = 64,              // Gemma-4-E2B-IT standard: 64
         val topP: Float = 0.95f,         // Gemma-4-E2B-IT standard: 0.95
@@ -37,7 +37,7 @@ Current date: {CURRENT_DATE}"""
     fun getSettingsFlow(context: Context): Flow<Settings> {
         return context.dataStore.data.map { prefs ->
             Settings(
-                maxTokens = prefs[MAX_TOKENS_KEY] ?: 2048,
+                maxTokens = prefs[MAX_TOKENS_KEY] ?: 8192,
                 temperature = prefs[TEMPERATURE_KEY] ?: 1.0f,   // Gemma-4-E2B-IT standard
                 topK = prefs[TOP_K_KEY] ?: 64,                  // Gemma-4-E2B-IT standard
                 topP = prefs[TOP_P_KEY] ?: 0.95f,

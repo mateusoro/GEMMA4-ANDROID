@@ -31,9 +31,9 @@ object LlmChatModelHelper {
     // LLM Parameters — Gemma-4-E2B-IT recommended defaults (per litert-community model card)
     data class LlmParams(
         val maxNumTokens: Int = 2048,
-        val temperature: Float = 1.0f,   // Gemma-4-E2B-IT standard: 1.0 (neutral, balanced creativity)
-        val topK: Int = 64,              // Gemma-4-E2B-IT standard: 64
-        val topP: Float = 0.95f          // Gemma-4-E2B-IT standard: 0.95
+        val temperature: Float = 1.0f,
+        val topK: Int = 64,
+        val topP: Float = 0.95f
     )
 
     private var currentParams: LlmParams = LlmParams()
@@ -108,20 +108,15 @@ object LlmChatModelHelper {
         currentModelPath = modelPath
         currentContext = context
         currentTools = tools
-        agentToolsInstance = agentTools
         currentAgentTools = agentTools
+        agentToolsInstance = agentTools
         currentSystemInstruction = systemInstruction
         currentChannels = channels
         currentExtraContext = extraContext
-        // Store tools reference so agentToolsInstance can be found after initialize()
         AppLogger.d(TAG, ">>> initialize() CALLED <<<")
         AppLogger.d(TAG, "modelPath: $modelPath")
         AppLogger.d(TAG, "params: maxTokens=${params.maxNumTokens}, temp=${params.temperature}, topK=${params.topK}, topP=${params.topP}")
         AppLogger.d(TAG, "tools: ${tools.size} ToolProviders")
-        AppLogger.d(TAG, "extraContext: $extraContext")
-        AppLogger.d(TAG, "channels: ${channels?.size ?: 0} Channel(s)")
-        AppLogger.d(TAG, "systemInstruction: ${systemInstruction?.toString()?.take(200) ?: "NULL"}")
-        AppLogger.d(TAG, "filesDir: ${context.filesDir}")
 
         onProgress("Procurando modelo...", 0)
 
@@ -145,9 +140,8 @@ object LlmChatModelHelper {
             onProgress("Modelo carregado com sucesso!", 100)
             return
         } catch (e: Exception) {
-            val msg = e.message ?: ""
-            AppLogger.w(TAG, "GPU failed: $msg")
-            if (msg.contains("PERMISSION_DENIED") || msg.contains("Permission denied") || msg.contains("open() failed")) {
+            AppLogger.w(TAG, "GPU failed: ${e.message}")
+            if (e.message?.contains("PERMISSION_DENIED") == true || e.message?.contains("open() failed") == true) {
                 AppLogger.w(TAG, "GPU permission denied - falling back to CPU")
             }
         }
@@ -171,7 +165,7 @@ object LlmChatModelHelper {
         backend: Backend,
         onProgress: (String, Int) -> Unit = { _, _ -> }
     ) {
-        AppLogger.d(TAG, "Backend: $backend (maxNumTokens=2048)")
+        AppLogger.d(TAG, "Backend: $backend")
 
         // If path is on sdcard, try to copy to internal storage for native access
         var actualPath: String = modelPath
@@ -196,13 +190,10 @@ object LlmChatModelHelper {
                 AppLogger.w(TAG, "Copy failed: ${e.message}, using original path")
                 actualPath = modelPath
             }
-        } else {
-            actualPath = modelPath
         }
 
         AppLogger.d(TAG, "EngineConfig created with path: $actualPath")
         AppLogger.d(TAG, "Creating Engine instance...")
-        AppLogger.d(TAG, "[PROGRESS] Criando engine... (30%)")
         onProgress("Criando engine...", 30)
 
         val engineConfig = EngineConfig(
@@ -214,13 +205,12 @@ object LlmChatModelHelper {
         )
         engine = Engine(engineConfig)
         AppLogger.d(TAG, "Engine instance created, calling initialize()...")
-        AppLogger.d(TAG, "[PROGRESS] Inicializando modelo (pode levar 10-20s)... (40%)")
         onProgress("Inicializando modelo (pode levar 10-20s)...", 40)
 
         engine!!.initialize()
         AppLogger.d(TAG, "engine.initialize() returned successfully")
         onProgress("Engine initialized, criando conversa...", 70)
-        registerAgentTools(currentTools)  // NOOP — AgentTools passed directly to initialize()
+
         AppLogger.d(TAG, "Creating conversation...")
         val samplerConfig = SamplerConfig(
             topK = currentParams.topK,
@@ -229,26 +219,21 @@ object LlmChatModelHelper {
         )
         AppLogger.d(TAG, "[ULTRA] SamplerConfig: topK=${currentParams.topK}, topP=${currentParams.topP}, temp=${currentParams.temperature}")
         AppLogger.d(TAG, "[ULTRA] currentTools count: ${currentTools.size}")
-        currentTools.forEachIndexed { idx, tp ->
-            AppLogger.d(TAG, "[ULTRA]   tool[$idx]: ${tp.javaClass.name}")
-        }
-        AppLogger.d(TAG, "[ULTRA] currentSystemInstruction: ${currentSystemInstruction?.toString()?.take(100)}")
-        AppLogger.d(TAG, "[ULTRA] currentChannels: ${currentChannels?.size ?: "null"}")
-        AppLogger.d(TAG, "[ULTRA] currentExtraContext: ${currentExtraContext ?: "null"}")
+
+        // Create ConversationConfig — automaticToolCalling=DISABLED for manual tool calling
+        // Our callback handles tool calls instead of the broken Conversation internal loop
         val convConfig = ConversationConfig(
             samplerConfig = samplerConfig,
             tools = currentTools,
             systemInstruction = currentSystemInstruction,
             channels = currentChannels,
-            extraContext = currentExtraContext ?: emptyMap()
+            extraContext = currentExtraContext ?: emptyMap(),
+            automaticToolCalling = false  // Manual mode: let our callback handle tool calls
         )
-        AppLogger.d(TAG, "[ULTRA] ConversationConfig created: tools=${convConfig.tools?.size ?: "null"}, sysInstr=${convConfig.systemInstruction != null}, channels=${convConfig.channels?.size ?: "null"}")
-        AppLogger.d(TAG, "ConversationConfig: automaticToolCalling=DEFAULT (auto mode)")
-        conversation = engine!!.createConversation(convConfig)
-        AppLogger.d(TAG, "Conversation created: $conversation with sampler topK=${currentParams.topK}, topP=${currentParams.topP}, temp=${currentParams.temperature}")
-        AppLogger.d(TAG, "[PROGRESS] Conversa pronta! (90%)")
-        onProgress("Conversa pronta!", 90)
 
+        conversation = engine!!.createConversation(convConfig)
+        AppLogger.d(TAG, "Conversation created: $conversation")
+        onProgress("Conversa pronta!", 90)
         AppLogger.i(TAG, ">>> INITIALIZATION COMPLETE (backend=$backend) <<<")
     }
 
@@ -259,12 +244,13 @@ object LlmChatModelHelper {
             topP = currentParams.topP.toDouble(),
             temperature = currentParams.temperature.toDouble()
         )
-        val convConfig = ConversationConfig(
+val convConfig = ConversationConfig(
             samplerConfig = samplerConfig,
             tools = currentTools,
             systemInstruction = currentSystemInstruction,
             channels = currentChannels,
-            extraContext = currentExtraContext ?: emptyMap()
+            extraContext = currentExtraContext ?: emptyMap(),
+            automaticToolCalling = false  // Manual mode
         )
         return engine!!.createConversation(convConfig)
     }
@@ -279,7 +265,8 @@ object LlmChatModelHelper {
         message: String,
         onToken: (String) -> Unit,
         onDone: () -> Unit,
-        onError: (Throwable) -> Unit
+        onError: (Throwable) -> Unit,
+        extraContext: Map<String, String> = emptyMap()
     ) {
         AppLogger.d(TAG, ">>> sendMessage() CALLED <<<")
 
@@ -300,7 +287,6 @@ object LlmChatModelHelper {
         AppLogger.d(TAG, "message: $message")
         AppLogger.d(TAG, "fullMessage (with sysInstr): ${fullMessage.take(100)}...")
 
-        // Use Contents.of(string) — this is what worked in the first successful test
         val messageContents = Contents.of(fullMessage)
         AppLogger.d(TAG, "[ULTRA] Contents.of(string) created: '${fullMessage.take(50)}...'")
 
@@ -311,16 +297,13 @@ object LlmChatModelHelper {
                 AppLogger.d(TAG, "[ULTRA] === onMessage() CALLED === role=${message.role} toolCalls=${message.toolCalls.size}")
                 AppLogger.d(TAG, "[ULTRA] message.toString() length: ${message.toString().length}")
                 AppLogger.d(TAG, "[ULTRA] message.toString(): '${message.toString().take(200)}'")
-                AppLogger.d(TAG, "[ULTRA] message.role: ${message.role}")
                 AppLogger.d(TAG, "[ULTRA] message.toolCalls.size: ${message.toolCalls.size}")
                 AppLogger.d(TAG, "[ULTRA] message.channels.keys: ${message.channels.keys}")
                 message.toolCalls.forEachIndexed { idx, tc ->
                     AppLogger.d(TAG, "[ULTRA]   toolCall[$idx]: name=${tc.name} args=${tc.arguments}")
                 }
                 AppLogger.d(TAG, "[TOOL-DEBUG] role=${message.role} toolCalls=${message.toolCalls.size} channels.keys=${message.channels.keys}")
-                // Log full message structure for debugging
-                AppLogger.d(TAG, "[TOOL-DEBUG] message string: '${message.toString().take(100)}'")
-                // Check if model generated text that looks like file listing
+
                 val msgStr = message.toString()
                 if (msgStr.contains(".pdf") || msgStr.contains(".md") || msgStr.contains("KB")) {
                     AppLogger.i(TAG, "[TOOL-DEBUG] *** MODEL OUTPUT FILE CONTENT: '$msgStr' ***")
@@ -331,19 +314,17 @@ object LlmChatModelHelper {
                     AppLogger.d(TAG, "[TOOL] Detected ${message.toolCalls.size} tool call(s) in manual mode")
                     for (toolCall in message.toolCalls) {
                         AppLogger.d(TAG, "[TOOL] name=${toolCall.name} args=${toolCall.arguments}")
-                        // Execute the tool via AgentTools
                         val toolResult = executeToolCall(toolCall.name, toolCall.arguments)
                         AppLogger.d(TAG, "[TOOL] result for ${toolCall.name}: $toolResult")
-                        // Send tool result back to model
                         sendToolResult(toolCall.name, toolResult, onToken, onDone, onError)
-                        return // Don't call onToken for tool call messages
+                        return
                     }
                 }
 
                 val text = message.toString()
                 AppLogger.d(TAG, "onMessage: '$text'")
 
-                // Also log thinking channel content if present
+                // Log thinking channel content if present
                 val thinkingContent = message.channels["thought"]
                 if (!thinkingContent.isNullOrEmpty()) {
                     AppLogger.d(TAG, "[THOUGHT-CHANNEL] $thinkingContent")
@@ -381,8 +362,8 @@ object LlmChatModelHelper {
         }
 
         AppLogger.d(TAG, "Calling conversation.sendMessageAsync()...")
-        AppLogger.d(TAG, "[ULTRA] conversation=${conversation.hashCode()} isNull=${conversation == null}")
-        conversation?.sendMessageAsync(messageContents, callback)
+        AppLogger.d(TAG, "[ULTRA] extraContext for this message: $extraContext")
+        conversation?.sendMessageAsync(messageContents, callback, extraContext)
         AppLogger.d(TAG, "sendMessageAsync() returned (async)")
     }
 
@@ -399,42 +380,30 @@ object LlmChatModelHelper {
         val wav = ByteArray(56 + dataSize)
         // RIFF header
         wav[0] = 'R'.code.toByte(); wav[1] = 'I'.code.toByte(); wav[2] = 'F'.code.toByte(); wav[3] = 'F'.code.toByte()
-        // File size - 8 (little endian)
         wav[4] = (fileSize and 0xFF).toByte(); wav[5] = ((fileSize shr 8) and 0xFF).toByte()
         wav[6] = ((fileSize shr 16) and 0xFF).toByte(); wav[7] = ((fileSize shr 24) and 0xFF).toByte()
         // WAVE
         wav[8] = 'W'.code.toByte(); wav[9] = 'A'.code.toByte(); wav[10] = 'V'.code.toByte(); wav[11] = 'E'.code.toByte()
         // fmt chunk
         wav[12] = 'f'.code.toByte(); wav[13] = 'm'.code.toByte(); wav[14] = 't'.code.toByte(); wav[15] = ' '.code.toByte()
-        // fmt chunk size (16 for PCM)
         wav[16] = 16; wav[17] = 0; wav[18] = 0; wav[19] = 0
-        // Audio format (1 = PCM)
         wav[20] = 1; wav[21] = 0
-        // Number of channels
         wav[22] = numChannels.toByte(); wav[23] = 0
-        // Sample rate (little endian)
         wav[24] = (sampleRate and 0xFF).toByte(); wav[25] = ((sampleRate shr 8) and 0xFF).toByte()
         wav[26] = ((sampleRate shr 16) and 0xFF).toByte(); wav[27] = ((sampleRate shr 24) and 0xFF).toByte()
-        // Byte rate
         wav[28] = (byteRate and 0xFF).toByte(); wav[29] = ((byteRate shr 8) and 0xFF).toByte()
         wav[30] = ((byteRate shr 16) and 0xFF).toByte(); wav[31] = ((byteRate shr 24) and 0xFF).toByte()
-        // Block align
         wav[32] = blockAlign.toByte(); wav[33] = 0
-        // Bits per sample
         wav[34] = bitsPerSample.toByte(); wav[35] = 0
         // fact chunk
         wav[36] = 'f'.code.toByte(); wav[37] = 'a'.code.toByte(); wav[38] = 'c'.code.toByte(); wav[39] = 't'.code.toByte()
-        // fact chunk size = 4
         wav[40] = 4; wav[41] = 0; wav[42] = 0; wav[43] = 0
-        // Number of samples (little endian)
         wav[44] = (numSamples and 0xFF).toByte(); wav[45] = ((numSamples shr 8) and 0xFF).toByte()
         wav[46] = ((numSamples shr 16) and 0xFF).toByte(); wav[47] = ((numSamples shr 24) and 0xFF).toByte()
         // data chunk
         wav[48] = 'd'.code.toByte(); wav[49] = 'a'.code.toByte(); wav[50] = 't'.code.toByte(); wav[51] = 'a'.code.toByte()
-        // Data size (little endian)
         wav[52] = (dataSize and 0xFF).toByte(); wav[53] = ((dataSize shr 8) and 0xFF).toByte()
         wav[54] = ((dataSize shr 16) and 0xFF).toByte(); wav[55] = ((dataSize shr 24) and 0xFF).toByte()
-        // raw PCM data
         for (i in audioBytes.indices) {
             wav[56 + i] = audioBytes[i]
         }
@@ -456,7 +425,7 @@ object LlmChatModelHelper {
             return
         }
 
-AppLogger.d(TAG, "Sending audio as WAV ${wrapAudioInWav(audioBytes).size} bytes (PCM ${audioBytes.size} bytes + 56-byte header with fact chunk)")
+        AppLogger.d(TAG, "Sending audio as WAV ${wrapAudioInWav(audioBytes).size} bytes")
         val callback = object : MessageCallback {
             private var done = false
             override fun onMessage(message: Message) {
@@ -519,27 +488,18 @@ AppLogger.d(TAG, "Sending audio as WAV ${wrapAudioInWav(audioBytes).size} bytes 
         initialize(ctx, path, params, null, tools, sysInstr, ch, extra, onProgress)
     }
 
-// Direct AgentTools reference — no reflection needed.
-    // tool() wraps AgentTools in an anonymous ToolProvider, breaking getSuperclass() reflection.
     private var agentToolsInstance: AgentTools? = null
 
-fun registerAgentTools(tools: List<ToolProvider>) {
-        // No longer needed — AgentTools is passed directly to initialize()
+    fun registerAgentTools(tools: List<ToolProvider>) {
         AppLogger.d(TAG, "[TOOL] registerAgentTools() stub — AgentTools passed directly")
     }
 
-    /**
-     * Executes a tool call by name via AgentTools reflection.
-     */
     private fun executeToolCall(name: String, arguments: Map<String, Any?>): Map<String, Any?> {
         AppLogger.d(TAG, "[TOOL] executeToolCall: $name args=$arguments")
         val result = callAgentToolsMethod(name, arguments)
         return result ?: mapOf("result" to "error", "message" to "Tool $name not found on AgentTools")
     }
 
-    /**
-     * Calls the named method on AgentTools via reflection (no Context param on methods).
-     */
     @Suppress("UNCHECKED_CAST")
     private val agentToolsMethods: Map<String, java.lang.reflect.Method> by lazy {
         agentToolsInstance?.let { inst ->
@@ -553,8 +513,12 @@ fun registerAgentTools(tools: List<ToolProvider>) {
         try {
             val instance = agentToolsInstance ?: return null
             AppLogger.d(TAG, "[TOOL] agentToolsInstance is ${if (instance != null) "SET ($instance)" else "NULL"}")
-            AppLogger.d(TAG, "[TOOL] Looking for method '$name' in ${agentToolsMethods.size} AgentTools methods")
-            val method = agentToolsMethods[name] ?: run {
+            // Model sends snake_case (list_workspace) but Kotlin methods are camelCase (listWorkspace)
+            val camelName = name.split("_").mapIndexed { i, part ->
+                if (i == 0) part else part.replaceFirstChar { it.uppercase() }
+            }.joinToString("")
+            AppLogger.d(TAG, "[TOOL] Looking for method '$name' (converted to '$camelName') in ${agentToolsMethods.size} AgentTools methods")
+            val method = agentToolsMethods[camelName] ?: run {
                 AppLogger.w(TAG, "[TOOL] Method '$name' not found in AgentTools")
                 return null
             }
@@ -568,9 +532,6 @@ fun registerAgentTools(tools: List<ToolProvider>) {
         }
     }
 
-    /**
-     * Sends a tool result back to the model in manual tool calling mode.
-     */
     private fun sendToolResult(
         toolName: String,
         result: Map<String, Any?>,
@@ -609,7 +570,6 @@ fun registerAgentTools(tools: List<ToolProvider>) {
         }
     }
 
-    /** Minimal JSON serializer for Map<String, Any?> — no external dependency. */
     private fun mapToJson(map: Map<String, Any?>): String {
         val sb = StringBuilder("{")
         map.entries.forEachIndexed { idx, (key, value) ->
@@ -629,7 +589,6 @@ fun registerAgentTools(tools: List<ToolProvider>) {
         return sb.toString()
     }
 
-    /** Minimal JSON serializer for List<Any?>. */
     private fun listToJson(list: List<Any?>): String {
         val sb = StringBuilder("[")
         list.forEachIndexed { idx, value ->

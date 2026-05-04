@@ -1,12 +1,9 @@
 ---
-slug: file-list-tool-no-response
-status: open
+slug: thinking-vs-toolcalling
+status: fixing
 trigger: "thinking mode causes model hang - thinking ON + tool calling = infinite reasoning loop"
 created: 2026-05-04
 updated: 2026-05-04
-root_cause: "WIP"
-fix: "WIP"
-verification: "WIP"
 ---
 
 # Debug Session: thinking-vs-toolcalling
@@ -56,7 +53,7 @@ conversation.sendMessageAsync(
 LlmChatModelHelper.initialize(
     ...
     listOf(thinkingChannel),              // ← WRONG: explicit Channel
-    mapOf("enable_thinking" to true)     // ← WRONG: at initialize level
+    mapOf("enable_thinking" to true)       // ← WRONG: at initialize level
 )
 
 // 2. sendMessageAsync — no extraContext
@@ -70,6 +67,7 @@ conversation.sendMessageAsync(contents, callback)  // ← missing extraContext
 3. `channels = null` in ConversationConfig → uses model metadata defaults
 4. Gallery passes `"true"` (string) not `true` (boolean) — template does string comparison
 5. `Message.channels["thought"]` carries thinking content token-by-token
+6. Thinking channel markers: `<|channel>thought\n` (start), `<channel|>` (end)
 
 ## Fix Plan
 
@@ -83,3 +81,4 @@ conversation.sendMessageAsync(contents, callback)  // ← missing extraContext
 - [Gemma 4 Prompt Formatting](https://ai.google.dev/gemma/docs/core/prompt-formatting-gemma4)
 - [LiteRT-LM getting_started.md](https://github.com/google-ai-edge/LiteRT-LM/blob/main/docs/api/kotlin/getting_started.md)
 - [Gallery LlmChatViewModel](https://github.com/google-ai-edge/gallery/blob/main/Android/src/app/src/main/java/com/google/ai/edge/gallery/ui/llmchat/LlmChatViewModel.kt) lines 210-226
+- [LiteRT-LM Config.kt Channel](https://github.com/google-ai-edge/LiteRT-LM/blob/main/kotlin/java/com/google/ai/edge/litertlm/Config.kt)

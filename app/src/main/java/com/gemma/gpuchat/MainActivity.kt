@@ -557,8 +557,8 @@ fun ChatScreen() {
             withContext(Dispatchers.IO) {
                 LlmChatModelHelper.initialize(
                     context, modelPath, params, agentToolsInstance, agentTools, sysInstruction,
-                    listOf(thinkingChannel),
-                    mapOf("enable_thinking" to true)
+                    null,  // channels: null = use model metadata (Gallery pattern)
+                    emptyMap()  // extraContext: no enable_thinking at conversation level (Gallery pattern)
                 ) { stage, progress ->
                     mainHandler.post {
                         initStage = stage
@@ -641,7 +641,8 @@ fun ChatScreen() {
                 onError = { error ->
                     AppLogger.e(TAG, "[AUTO-ERROR] ${error.message}", error)
                     autoMessageState = 2
-                }
+                },
+                extraContext = mapOf("enable_thinking" to "true")  // Gallery pattern: per message
             )
         }
     }

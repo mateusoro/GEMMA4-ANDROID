@@ -21,7 +21,14 @@ Android chat app using on-device AI (Gemma-4-E2B-IT via LiteRT-LM GPU backend, 2
 
 ## Logging & Debugging
 
-**IMPORTANT: logcat does NOT work on this device.** All app logs must be read from the log file:
+**IMPORTANT: logcat may not work on this device by default.** To enable full logcat logging:
+
+```bash
+# Enable logcat on device (persists across reboots)
+adb shell setprop persist.log.tag *
+```
+
+All app logs can also be read from the log file (when logcat is disabled):
 
 ```bash
 # Read app log file (run-as required)
@@ -119,6 +126,17 @@ Use GSD commands for all project management. Never use TodoWrite, TaskCreate, or
 - **systemInstruction: Use `Contents.of(listOf(Content.Text(...)))` NOT `Contents.of(string)`** — Gallery pattern, see `.planning/debug/file-list-tool-no-response.md`
 - **Model needs warmup** — first inference after restart may return 0 chars; restart app and retry
 - **logcat broken on this device** — read logs from `files/gemma_startup.nlog` via `run-as`
+
+## 하네스: Gemma4Android
+
+**목표:** Coordinate android-developer, ml-engineer, and qa-agent for efficient feature development and debugging.
+
+**트리거:** New feature requests, bug fixes, UI changes, tool integration, model configuration changes, or any cross-cutting work. Use `gemma-orchestrator` skill. For specialized work: `gemma-developer` (UI/Compose), `ml-engineer` (LiteRT-LM/tools), `qa-agent` (testing).
+
+**변경 이력:**
+| 날짜 | 변경 내용 | 대상 | 사유 |
+|------|----------|------|------|
+| 2026-05-04 | 초기 구성 | 전체 | Harness built for Gemma4Android project |
 
 ## Session Completion
 
