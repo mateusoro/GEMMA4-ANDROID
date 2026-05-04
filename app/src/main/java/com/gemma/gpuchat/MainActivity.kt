@@ -455,6 +455,16 @@ fun ChatScreen() {
                                     }
                                 }
                             }
+                        },
+                        onThinking = { thinking ->
+                            mainHandler.post {
+                                val lastBot = messages.indexOfLast { !it.isUser }
+                                if (lastBot >= 0) {
+                                    messages = messages.mapIndexed { idx, msg ->
+                                        if (idx == lastBot) msg.copy(thinkingText = thinking) else msg
+                                    }
+                                }
+                            }
                         }
                     )
                 } catch (e: Exception) {
@@ -1116,6 +1126,16 @@ fun ChatScreen() {
                                                                 }
                                                             }
                                                         }
+                                                    },
+                                                    onThinking = { thinking ->
+                                                        mainHandler.post {
+                                                            val lastBot = messages.indexOfLast { !it.isUser }
+                                                            if (lastBot >= 0) {
+                                                                messages = messages.mapIndexed { idx, msg ->
+                                                                    if (idx == lastBot) msg.copy(thinkingText = thinking) else msg
+                                                                }
+                                                            }
+                                                        }
                                                     }
                                                 )
                                             }
@@ -1242,7 +1262,17 @@ fun ChatScreen() {
                                     isResponding = false
                                     val lastBotIdx = messages.indexOfLast { !it.isUser }
                                     if (lastBotIdx >= 0) messages = messages.mapIndexed { idx, msg -> if (idx == lastBotIdx) msg.copy(text = "Erro: ${error.message}") else msg }
-                                } }
+                                } },
+                                onThinking = { thinking ->
+                                    mainHandler.post {
+                                        val lastBot = messages.indexOfLast { !it.isUser }
+                                        if (lastBot >= 0) {
+                                            messages = messages.mapIndexed { idx, msg ->
+                                                if (idx == lastBot) msg.copy(thinkingText = thinking) else msg
+                                            }
+                                        }
+                                    }
+                                }
                             )
                         },
                         enabled = isModelReady && inputText.isNotBlank() && !isResponding
@@ -1386,6 +1416,16 @@ fun ChatScreen() {
                     mainHandler.post { isResponding = false }
                     scope.launch {
                         snackbarHostState.showSnackbar("Error: ${error.message}")
+                    }
+                },
+                onThinking = { thinking ->
+                    mainHandler.post {
+                        val lastBot = messages.indexOfLast { !it.isUser }
+                        if (lastBot >= 0) {
+                            messages = messages.mapIndexed { idx, msg ->
+                                if (idx == lastBot) msg.copy(thinkingText = thinking) else msg
+                            }
+                        }
                     }
                 }
             )

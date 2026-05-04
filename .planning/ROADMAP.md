@@ -78,7 +78,7 @@ Plans:
 **Plans:** 1 plan
 
 Plans:
-- [ ] 08-01-PLAN.md — ThinkingBubble composable + LazyColumn integration + onThinking callback wiring
+- [x] 08-01-PLAN.md — ThinkingBubble composable + LazyColumn integration + onThinking callback wiring
 
 **UI hint:** yes
 
@@ -115,7 +115,7 @@ Plans:
 | 5. Edge-to-Edge UI | v1.0 | 1/1 | Complete | 2026-05-02 |
 | 6. Testing Standard | v1.0 | 1/1 | Complete | 2026-05-02 |
 | 7. Foundation | v1.1 | 1/1 | Complete | 2026-05-04 |
-| 8. UI Implementation | v1.1 | 1/1 | Planned | - |
+| 8. UI Implementation | v1.1 | 1/1 | Complete | 2026-05-04 |
 | 9. Polish | v1.1 | 0/TBD | Not started | - |
 
 ---
