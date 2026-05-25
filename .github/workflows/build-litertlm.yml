@@ -35,17 +35,20 @@ jobs:
             echo "File may already be fixed or structure changed"
           fi
 
-      - name: Build Android ARM64
+      - name: Build JNI (C++ shared library)
         run: |
           cd LiteRT-LM
-          # Install Bazelisk via curl
           curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.20.0/bazelisk-linux-amd64 -o /tmp/bazelisk
           chmod +x /tmp/bazelisk
           export PATH="/tmp:$PATH"
-          bazel build --config=android_arm64 //kotlin/java/com/google/ai/edge/litertlm:litertlm-android --jobs=4
+          bazel build --config=android_arm64 //kotlin/java/com/google/ai/edge/litertlm/jni:litertlm_jni --jobs=4
+
+      - name: List outputs
+        run: |
+          ls -la LiteRT-LM/bazel-bin/kotlin/java/com/google/ai/edge/litertlm/jni/ 2>/dev/null || echo "JNI output not found"
 
       - name: Upload AAR
         uses: actions/upload-artifact@v4
         with:
-          name: litertlm-android
-          path: LiteRT-LM/bazel-bin/kotlin/java/com/google/ai/edge/litertlm/litertlm-android.aar
+          name: litertlm-android-artifacts
+          path: LiteRT-LM/bazel-bin/kotlin/java/com/google/ai/edge/litertlm/jni/liblitertlm_jni.so
