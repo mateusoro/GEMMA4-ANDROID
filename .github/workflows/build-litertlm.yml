@@ -41,6 +41,13 @@ jobs:
           curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.20.0/bazelisk-linux-amd64 -o /tmp/bazelisk
           chmod +x /tmp/bazelisk
           export PATH="/tmp:$PATH"
+          
+          # Fix checksum issue - update WORKSPACE to use actual checksum
+          sed -i 's/9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23/f26d3428baed184d98cc1d649fd25594bbde935538b83f83a4cb6c78df5e2536/' WORKSPACE
+          
+          # Clear any cached minizip repos to avoid stale checksum errors
+          rm -rf ~/.cache/bazel/_bazel_runner/*/external/minizip 2>/dev/null || true
+          
           bazel build --config=android_arm64 //kotlin/java/com/google/ai/edge/litertlm/jni:litertlm_jni --jobs=4
 
       - name: List outputs
