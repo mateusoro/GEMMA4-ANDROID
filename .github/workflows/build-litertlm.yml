@@ -38,8 +38,10 @@ jobs:
       - name: Build Android ARM64
         run: |
           cd LiteRT-LM
-          # Build Kotlin Android SDK
-          npm install -g @bazel/bazelisk
+          # Install Bazelisk via curl
+          curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.20.0/bazelisk-linux-amd64 -o /tmp/bazelisk
+          chmod +x /tmp/bazelisk
+          export PATH="/tmp:$PATH"
           bazel build --config=android_arm64 //kotlin/java/com/google/ai/edge/litertlm:litertlm-android --jobs=4
 
       - name: Upload AAR
