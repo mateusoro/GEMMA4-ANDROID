@@ -33,9 +33,9 @@ class AudioTranscriber(private val context: Context) {
             throw IllegalStateException("Model not found at $modelPath")
         }
 
-        // Use CPU for audio — GPU doesn't support audio decoding (Issue #1575)
+        // Audio transcription model is not NPU-compiled on this device
+        // (NPU fails with "TF_LITE_AUX not found in the model"). Keep GPU for audio.
         val audioBackend = Backend.CPU()
-
         val engineConfig = EngineConfig(
             modelPath = modelPath,
             backend = Backend.GPU(),

@@ -1,0 +1,10 @@
+{
+  "session_id": "ccd7a870-99bd-4ed0-b2eb-2c20c312b091",
+  "current_phase": "planning",
+  "completed_phases": [],
+  "active_agent": "planner",
+  "last_agent_result": null,
+  "blocked_reason": null,
+  "created_at": "2026-05-20T00:06:38.523Z",
+  "updated_at": "2026-05-20T00:06:38.524Z"
+}

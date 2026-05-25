@@ -1,0 +1,13 @@
+{
+  "session_id": "e1f5e562-471a-4d76-ac4b-16f03073015f",
+  "current_phase": "planning",
+  "completed_phases": [],
+  "active_agent": "planner",
+  "last_agent_result": null,
+  "agent_results": {},
+  "context_markdown": "",
+  "test_strategy_markdown": "## Test Strategy: estrategia_teste.md\n\n# Estratégia de Teste - Gemma4Android\n\n## Níveis de Teste\n\n### 1. Teste de Build (verificação estática)\n- `./gradlew assembleDebug` - compilação do APK\n- Verifica se não há erros de compilação Kotlin/Compose\n- **Evidência**: `app/build/outputs/apk/debug/app-debug.apk` gerado com sucesso\n\n### 2. Teste Unitário\n- `./gradlew testDebugUnitTest` - testes unitários Java/Kotlin\n- **Evidência**: relatório em `app/build/reports/tests/testDebugUnitTest/index.html`\n\n### 3. Teste de Instrumentação (dispositivo real)\n- `./gradlew connectedDebugAndroidTest` - requer dispositivo/emulador conectado\n- **Comando**: `adb install -r app/build/outputs/apk/debug/app-debug.apk`\n- **Esperado**: dispositivo com Android 15 (SDK 35)\n\n### 4. Teste Manual - PDF Chat Flow\n**Sintoma verificado**: Ao enviar PDF, não deve haver mensagens \"travadas\" no início antes do thinking.\n\n**Passos para verificar**:\n1. `adb install -r app/build/outputs/apk/debug/app-debug.apk`\n2. `adb shell am start -n com.gemma.gpuchat/.MainActivity`\n3. Anexar PDF via botão de atachamento (📎)\n4. Observar o chat:\n   - ✅ Deve aparecer apenas uma mensagem do bot (vazia) aguardando resposta\n   - ✅ Thinking deve aparecer em sequência (`ThinkingBubble`)\n   - ✅ Resposta final deve chegar após thinking\n   - ❌ NÃO deve haver mensagem \"📄 Processando PDF...\" antes\n   - ❌ NÃO deve haver notificação de workspace como mensagem separada\n\n**Evidência requerida**:\n- Log do adb: `adb logcat -s GEMMA MainActivity` durante o fluxo PDF\n-Screenshot do chat após resposta completa\n\n## Quando verificação estática é insuficiente\n\n- Build passando não garante que o fluxo de UI (PDF → markdown → thinking → resposta) funciona corretamente\n- Teste manual em dispositivo real é obrigatório para verificar timing das mensagens e callbacks de streaming\n- Logs de `LlmChatModelHelper` são essenciais para confirmar que não há mensagens duplicadas no início",
+  "blocked_reason": null,
+  "created_at": "2026-05-21T00:35:33.589Z",
+  "updated_at": "2026-05-21T00:40:15.104Z"
+}

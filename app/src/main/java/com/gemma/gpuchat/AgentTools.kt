@@ -144,15 +144,14 @@ class AgentTools private constructor() : ToolSet {
         }
     }
 
-    /** Salva um arquivo Markdown no workspace. */
-    @Tool(description = "Saves a markdown file to the workspace with the given filename and content.")
-    fun saveMarkdownFile(
-        @ToolParam(description = "The filename for the markdown file (e.g., 'nota.md')") filename: String,
-        @ToolParam(description = "The markdown content to save") content: String
+    /** Salva um arquivo Markdown vazio no workspace. */
+    @Tool(description = "Saves an empty markdown file to the workspace with the given filename.")
+    fun savefile(
+        @ToolParam(description = "The exact filename for the markdown file, for example 'nota.md'") filename: String
     ): Map<String, String> {
-        Log.d(TAG, "saveMarkdownFile: $filename")
+        Log.d(TAG, "savefile: $filename")
         val ctx = appContext ?: return mapOf("result" to "error", "message" to "Context not initialized")
-        val path = WorkspaceManager.saveMarkdown(ctx, filename.removeSuffix(".md"), content)
+        val path = WorkspaceManager.saveMarkdown(ctx, filename.removeSuffix(".md"), "")
         return if (path != null) {
             mapOf("result" to "success", "filename" to filename, "path" to path)
         } else {
