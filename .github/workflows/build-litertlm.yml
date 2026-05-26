@@ -38,6 +38,11 @@ jobs:
       - name: Build JNI (C++ shared library)
         run: |
           cd LiteRT-LM
+          # Install Git LFS
+          apt-get update -qq && apt-get install -y -qq git-lfs
+          git lfs install
+          git lfs pull
+          
           curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.20.0/bazelisk-linux-amd64 -o /tmp/bazelisk
           chmod +x /tmp/bazelisk
           export PATH="/tmp:$PATH"
